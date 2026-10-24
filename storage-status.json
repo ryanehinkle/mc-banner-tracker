@@ -1,7 +1,5 @@
 {
-  "api": "https://superjsonblob.com/api/jsonBlob/9945993a-897e-4617-b03c-d67713090261",
-  "origin_allowed": false,
-  "put_allowed": false,
-  "headers": false,
-  "status": 204
+  "origin": true,
+  "put": true,
+  "content_type": true
 }
