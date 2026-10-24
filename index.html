@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111416">
+  <meta name="description" content="A simple place to save Minecraft banner designs.">
+  <title>Banner Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='15' y='6' width='34' height='49' rx='3' fill='%2387ddb0'/%3E%3Cpath d='M15 6h34v16H15z' fill='%23b0f2d0'/%3E%3Cpath d='M29 55h6v7h-6z' fill='%2387ddb0'/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme:dark; --bg:#111416; --panel:#1b1f22; --panel2:#202528; --stroke:#30383b; --text:#f0f3f1; --muted:#889494; --accent:#9ce6b8; --accent2:#74cfa2; }
+    * { box-sizing:border-box }
+    body { margin:0; min-height:100vh; background:radial-gradient(ellipse 70% 400px at 50% -230px,#24352d 0%,transparent 100%),var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    button,input { font:inherit }
+    button { cursor:pointer }
+    button:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid var(--accent); outline-offset:4px }
+    .shell { max-width:1170px; padding:50px 30px 90px; margin:auto }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:35px; gap:18px }
+    .brand { display:flex; align-items:center; gap:15px }
+    .logo { display:grid; place-items:center; width:48px;height:48px;border-radius:14px;background:#21342b;border:1px solid #335342; color:var(--accent); box-shadow:0 6px 24px #0002 }
+    .logo svg { width:25px;height:25px }
+    h1 { font-weight:725; letter-spacing:-1.2px; font-size:29px; line-height:1.18; margin:0 }
+    .subtitle { color:var(--muted); margin:4px 0 0;font-size:13px }
+    .header-count { background:#1d2423;border:1px solid var(--stroke);border-radius:40px;padding:8px 13px;color:#c0ccc7;font-size:12px;font-weight:600;white-space:nowrap }
+    .dropzone { position:relative; border:1.5px dashed #43574f;background:linear-gradient(115deg,#1c2420,#1b2120); border-radius:18px; padding:29px 26px; display:flex;gap:17px;align-items:center;transition:background .2s,border-color .2s,transform .2s,box-shadow .2s }
+    .dropzone:focus-within,.dropzone.drag-over { border-color:var(--accent);background:#22342a;box-shadow:0 0 0 4px #9ce6b812 }
+    .drop-icon { flex:0 0 52px;height:52px;display:grid;place-items:center;background:#2a3d33;border:1px solid #3b5b47;border-radius:14px;color:var(--accent);transition:transform .2s }
+    .drop-icon svg {width:23px;height:23px}
+    .dropzone.drag-over .drop-icon{transform:translateY(-3px)}
+    .drop-content { flex:1;min-width:0 }
+    .drop-caption {font-size:13px; font-weight:650; color:#e0eae4; margin:0 0 4px}
+    .url-input {display:block;width:100%;border:0;outline:none;background:transparent;color:#f3fff7;font-size:16px;letter-spacing:-.2px;padding:0;overflow:hidden;text-overflow:ellipsis}
+    .url-input::placeholder { color:#869990;opacity:1 }
+    .url-input:focus-visible {outline:none}
+    .drop-note {font-size:12px;color:#81918a;margin:6px 0 0}
+    .check-mark { display:grid;place-items:center;color:var(--accent);opacity:0;transform:scale(.6);transition:opacity .2s,transform .2s }
+    .dropzone.added .check-mark {opacity:1;transform:scale(1)}
+    .toolbar {display:flex;align-items:center;justify-content:space-between;margin:40px 0 19px;gap:10px}
+    h2{font-size:17px;letter-spacing:-.35px;font-weight:650;margin:0}
+    .filters {display:inline-flex;align-items:center;gap:3px;background:#1a1e21;border:1px solid #293033;padding:4px;border-radius:10px}
+    .filter {border:0;background:transparent;color:#8b9796;font-size:12px;font-weight:650;padding:7px 12px;border-radius:7px;transition:background .16s,color .16s}
+    .filter:hover{color:var(--text)}
+    .filter.selected {background:#303a38;color:#e7f7eb;box-shadow:0 1px 5px #0002}
+    .grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:17px}
+    .card {position:relative;background:var(--panel);border:1px solid #2d3437;border-radius:16px;overflow:hidden;min-width:0;box-shadow:0 5px 20px #0000000b;transition:transform .2s,border-color .2s,background .2s,box-shadow .2s;animation:appear .28s both}
+    .card:hover {transform:translateY(-3px);border-color:#486453;box-shadow:0 12px 32px #0004;background:#1d2325}
+    .card.completed .preview {filter:saturate(.78)}
+    .card.completed .name-text {color:#aab6b0}
+    .card-link {display:block;color:inherit;text-decoration:none;outline-offset:-3px}
+    .preview {height:236px;display:flex;justify-content:center;align-items:center;background:radial-gradient(ellipse at 50% 42%,#343b39 0%,#252b2d 54%,#212628 96%);position:relative;transition:filter .2s}
+    .preview:before {content:"";pointer-events:none;position:absolute;inset:12px;border:1px solid #ffffff08;border-radius:8px}
+    .preview canvas {width:91px;height:182px;image-rendering:pixelated;object-fit:contain;filter:drop-shadow(5px 7px 5px #0005)}
+    .card-link:hover .preview canvas{filter:drop-shadow(6px 9px 5px #0007)}
+    .name-line {display:flex;align-items:center;justify-content:space-between;gap:6px;padding:14px 14px 8px}
+    .name-text {font-weight:650;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;letter-spacing:-.15px}
+    .out-icon {color:#778681;flex:0 0 auto}
+    .out-icon svg {width:15px;height:15px}
+    .bottom {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 11px 10px 14px}
+    .made-control {display:inline-flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:12px;color:#99aaa1;font-weight:550;user-select:none}
+    .made-control input {accent-color:var(--accent2);width:15px;height:15px;cursor:pointer;margin:0}
+    .actions {display:flex;gap:2px}
+    .icon-btn {width:30px;height:30px;border:0;border-radius:8px;display:grid;place-items:center;color:#85928d;background:transparent;transition:background .16s,color .16s}
+    .icon-btn svg {width:15px;height:15px}
+    .icon-btn:hover {color:#ecf5ef;background:#333c3a}
+    .icon-btn.delete:hover{color:#ffb7b7;background:#563339}
+    .editor {margin:10px 12px 3px;width:calc(100% - 24px);padding:8px 10px;background:#121919;color:var(--text);border:1px solid var(--accent2);border-radius:8px;font-size:14px;outline:0}
+    .empty {padding:72px 20px 75px;text-align:center;border:1px dashed #303a38;border-radius:18px;background:#191e2014}
+    .empty-illustration{display:flex;align-items:center;justify-content:center;margin:0 auto 21px;width:62px;height:86px;filter:drop-shadow(4px 6px 4px #0003)}
+    .empty-illustration svg{width:100%;height:100%}
+    .empty-title {font-size:15px;font-weight:650;margin:0 0 5px}
+    .empty-description {color:var(--muted);font-size:13px;margin:0}
+    .toast {position:fixed;bottom:28px;left:50%;transform:translate(-50%,15px);opacity:0;pointer-events:none;background:#303a35;color:#f5fff8;border:1px solid #54705d;padding:11px 16px;border-radius:11px;box-shadow:0 12px 38px #0007;font-size:13px;z-index:20;transition:opacity .2s,transform .2s}
+    .toast.show{opacity:1;transform:translate(-50%,0)}
+    .toast button{border:0;background:transparent;color:var(--accent);font-weight:700;margin-left:9px;padding:1px 2px;pointer-events:auto}
+    @keyframes appear {from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    @media(max-width:560px) {
+      .shell{padding:27px 17px 70px}
+      header{margin-bottom:27px}
+      h1{font-size:25px}
+      .logo{width:43px;height:43px;border-radius:12px}
+      .header-count{font-size:11px;padding:7px 10px}
+      .dropzone{padding:23px 16px;gap:12px;border-radius:15px}
+      .drop-icon{width:43px;height:43px;flex-basis:43px}
+      .drop-caption{font-size:12px}
+      .url-input{font-size:14px}
+      .drop-note{font-size:11px}
+      .toolbar{margin-top:31px}
+      .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+      .preview{height:200px}
+      .preview canvas{width:77px;height:154px}
+      .name-line{padding:12px 10px 5px}
+      .name-text{font-size:13px}
+      .bottom{padding:0 7px 9px 10px}
+      .made-control{font-size:11px;gap:5px}
+      .filter{padding:6px 9px;font-size:11px}
+    }
+    @media(max-width:355px){.grid{grid-template-columns:1fr}.preview{height:225px}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v17l-7-4-7 4V3Z"/><path d="M8 7h8M8 11h5"/></svg></div>
+      <div><h1>Banner Tracker</h1><p class="subtitle">Your Minecraft banner collection</p></div>
+    </div>
+    <span class="header-count" id="headerCount">0 saved</span>
+  </header>
+  <section class="dropzone" id="dropzone" aria-label="Add a banner">
+    <div class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div class="drop-content">
+      <p class="drop-caption">Add a banner</p>
+      <input class="url-input" id="urlInput" type="url" inputmode="url" placeholder="Paste or drag a Minecraft Tools link…" autocomplete="off" spellcheck="false" aria-label="Minecraft Tools banner URL">
+      <p class="drop-note">Saved instantly when you paste or drop a link</p>
+    </div>
+    <span class="check-mark" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="m5 12 4 4 10-10"/></svg></span>
+  </section>
+  <div class="toolbar">
+    <h2 id="sectionTitle">My banners</h2>
+    <div class="filters" role="group" aria-label="Filter banners">
+      <button class="filter selected" type="button" data-filter="all" aria-pressed="true">All</button>
+      <button class="filter" type="button" data-filter="todo" aria-pressed="false">To make</button>
+      <button class="filter" type="button" data-filter="done" aria-pressed="false">Made</button>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty">
+    <div class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 64 88" fill="none"><path d="M15 5h34v73L32 67 15 78V5Z" fill="#293d32" stroke="#5a8568" stroke-width="2"/><path d="M16 9h32v13H16z" fill="#42795c"/><path d="M22 35h20M32 25v29" stroke="#86d4aa" stroke-width="4" stroke-linecap="square"/><path d="m27 86 5-5 5 5" stroke="#5a8568" stroke-width="2"/></svg></div>
+    <p class="empty-title" id="emptyTitle">No banners yet</p>
+    <p class="empty-description" id="emptyDescription">Paste a link above to save your first design.</p>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+(function() {
+  "use strict";
+  var STORE = "mc-banner-tracker:v1";
+  var colors = ["#1d1d21","#b02e26","#5e7c16","#835432","#3c44aa","#8932b8","#169c9c","#9d9d97","#474f52","#f38baa","#80c71f","#fed83d","#3ab3da","#c74ebd","#f9801d","#f9fffe"];
+  // Minecraft Tools' legacy shape IDs (0 = no pattern). Order matters.
+  var shapes = {
+    1:"circle",2:"square_bottom_left",3:"square_bottom_right",4:"square_top_left",5:"square_top_right",
+    6:"stripe_bottom",7:"stripe_top",8:"half_horizontal",9:"half_horizontal_bottom",
+    10:"stripe_left",11:"stripe_center",12:"stripe_right",13:"stripe_middle",14:"stripe_downright",15:"stripe_downleft",
+    16:"half_vertical",17:"half_vertical_right",18:"cross",19:"straight_cross",
+    20:"triangle_top",21:"triangle_bottom",22:"rhombus",23:"triangles_top",24:"triangles_bottom",
+    25:"curly_border",26:"border",27:"small_stripes",28:"bricks",29:"gradient",30:"creeper",31:"skull",32:"flower",33:"mojang",
+    34:"diagonal_left",35:"diagonal_right",36:"gradient_up",37:"piglin",38:"flow",39:"globe",40:"guster"
+  };
+  var entries = loadEntries();
+  var filter = "all";
+  var cachedImages = new Map();
+  var pendingTimer = null;
+  var toastTimer = null;
+  var undone = null;
+  var $ = function(id) { return document.getElementById(id); };
+  var dropzone = $("dropzone");
+  var urlInput = $("urlInput");
+  var grid = $("grid");
+  var empty = $("empty");
+  var toast = $("toast");
+
+  function loadEntries() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(STORE) || "[]");
+      return Array.isArray(parsed) ? parsed.filter(function(v) { return v && typeof v.url === "string" && typeof v.name === "string"; }) : [];
+    } catch(err) { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE,JSON.stringify(entries)); }
+    catch(err) { notify("Could not save. Check your browser storage."); }
+  }
+  function urlFromText(text) {
+    var match = String(text || "").match(/https?:\/\/[^\s<>"']+/i);
+    if (!match) return null;
+    return match[0].replace(/[),.;]+$/,"").replace(/&amp;/g,"&");
+  }
+  function parseBanner(text) {
+    var candidate = urlFromText(text);
+    if (!candidate) return null;
+    try {
+      var u = new URL(candidate);
+      if (!/^(www\.)?minecraft\.tools$/i.test(u.hostname) || !/\/banner\.php$/i.test(u.pathname)) return null;
+      if (!/^\d{1,2}$/.test(u.searchParams.get("color_id_0") || "")) return null;
+      var base = Number(u.searchParams.get("color_id_0"));
+      if (base < 0 || base > 15) return null;
+      var layers = [];
+      for (var i=1;i<=8;i++) {
+        var s = Number(u.searchParams.get("shape_id_"+i));
+        var c = Number(u.searchParams.get("color_id_"+i));
+        if (Number.isInteger(s) && s > 0 && shapes[s] && u.searchParams.has("color_id_"+i) && c >= 0 && c <= 15) layers.push({shape:s,color:c});
+      }
+      var key = String(base)+"|"+layers.map(function(l) {return l.shape+":"+l.color;}).join("|");
+      return {url:u.href,base:base,layers:layers,key:key};
+    } catch(err) { return null; }
+  }
+  function getNameFromDrop(transfer) {
+    var rawHTML = transfer.getData("text/html");
+    if (!rawHTML) return "";
+    try {
+      var doc = new DOMParser().parseFromString(rawHTML,"text/html");
+      var links = doc.querySelectorAll("a[href]");
+      for (var i=0;i<links.length;i++) {
+        var a=links[i];
+        var href=a.getAttribute("href") || "";
+        if (parseBanner(href)) {
+          var label=(a.textContent || a.querySelector("img")?.getAttribute("alt") || "").trim();
+          if (label && label.length<110 && !/^https?:\/\//i.test(label)) return label;
+        }
+      }
+      var img=doc.querySelector("img[alt]");
+      if (img && img.alt && img.alt.length<90) return img.alt.trim();
+    } catch(err) {}
+    return "";
+  }
+  function normalizeName(name) {
+    return String(name||"").replace(/\s+/g," ").trim().slice(0,72);
+  }
+  function defaultName(banner) {
+    // Known example linked from the original Bunny <3 gallery card.
+    if (banner.key === "13|1:15|32:15|17:15|13:0|25:5|21:15") return "Bunny <3";
+    return "Banner "+(entries.length+1);
+  }
+  function addBanner(text,name) {
+    var parsed = parseBanner(text);
+    if (!parsed) return false;
+    var match = entries.find(function(item) {return (parseBanner(item.url)||{}).key===parsed.key;});
+    if (match) {
+      urlInput.value="";
+      notify("Already in your collection");
+      var card=document.querySelector('[data-id="'+match.id+'"]');
+      if(card) {card.scrollIntoView({behavior:"smooth",block:"center"});card.style.borderColor="#9ce6b8";setTimeout(function(){card.style.borderColor="";},900);}
+      return true;
+    }
+    entries.unshift({
+      id:window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random().toString(36).slice(2),
+      url:parsed.url,name:normalizeName(name)||defaultName(parsed),done:false,created:Date.now()
+    });
+    save();
+    filter="all";
+    render();
+    urlInput.value="";
+    dropzone.classList.add("added");
+    setTimeout(function(){dropzone.classList.remove("added");},750);
+    notify("Banner saved");
+    return true;
+  }
+  function importFromInput() {
+    var input=urlInput.value.trim();
+    if(!input) return;
+    if(addBanner(input)) return;
+    // Invalid link stays in the field, making it easy to correct.
+  }
+  urlInput.addEventListener("input",function(){
+    clearTimeout(pendingTimer);
+    pendingTimer=setTimeout(importFromInput,90);
+  });
+  urlInput.addEventListener("paste",function(e){
+    var str=e.clipboardData && e.clipboardData.getData("text/plain");
+    if(str && parseBanner(str)) {
+      e.preventDefault();
+      clearTimeout(pendingTimer);
+      addBanner(str);
+    }
+  });
+  urlInput.addEventListener("keydown",function(e) {
+    if (e.key==="Enter") {e.preventDefault(); if (!importFromInput()) {if(urlInput.value.trim() && !parseBanner(urlInput.value)) notify("Paste a Minecraft Tools banner link");}}
+  });
+  ["dragenter","dragover"].forEach(function(type){
+    dropzone.addEventListener(type,function(e){e.preventDefault();dropzone.classList.add("drag-over");});
+  });
+  dropzone.addEventListener("dragleave",function(e){
+    if(!dropzone.contains(e.relatedTarget)) dropzone.classList.remove("drag-over");
+  });
+  dropzone.addEventListener("drop",function(e){
+    e.preventDefault();
+    dropzone.classList.remove("drag-over");
+    var transfer=e.dataTransfer;
+    if(!transfer)return;
+    var html=transfer.getData("text/html");
+    var doc,link="";
+    if(html) {
+      try {
+        doc=new DOMParser().parseFromString(html,"text/html");
+        var candidates=doc.querySelectorAll("a[href]");
+        for(var i=0;i<candidates.length;i++) if(parseBanner(candidates[i].href)) {link=candidates[i].href;break;}
+      } catch(err) {}
+    }
+    link=link || transfer.getData("text/uri-list") || transfer.getData("text/plain");
+    if(!addBanner(link,getNameFromDrop(transfer))) notify("Drop an individual Minecraft Tools banner link");
+  });
+  dropzone.addEventListener("click",function(e){if(e.target!==urlInput) urlInput.focus();});
+
+  function imageFor(name) {
+    if(!name)return Promise.resolve(null);
+    if(cachedImages.has(name))return cachedImages.get(name);
+    var promise=new Promise(function(resolve){
+      var img=new Image();
+      img.onload=function(){resolve(img);};
+      img.onerror=function(){resolve(null);};
+      img.src="assets/banner/"+name+".png";
+    });
+    cachedImages.set(name,promise);
+    return promise;
+  }
+  function regionData(image) {
+    if(!image)return null;
+    var cv=document.createElement("canvas");cv.width=20;cv.height=40;
+    var cx=cv.getContext("2d",{willReadFrequently:true});
+    cx.clearRect(0,0,20,40);
+    cx.drawImage(image,20,0,20,40,0,0,20,40);
+    return cx.getImageData(0,0,20,40).data;
+  }
+  function hexRGB(hex) {
+    return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+  }
+  async function drawBanner(canvas,link) {
+    var banner=parseBanner(link); if(!banner)return;
+    var patternNames=banner.layers.map(function(l){return shapes[l.shape];});
+    var images=await Promise.all([imageFor("base")].concat(patternNames.map(imageFor)));
+    if(!canvas.isConnected)return;
+    var base=regionData(images[0]);
+    var layers=images.slice(1).map(regionData);
+    var ctx=canvas.getContext("2d",{alpha:false});
+    var out=ctx.createImageData(20,40);
+    var rgb=hexRGB(colors[banner.base]);
+    for(var p=0;p<800;p++){
+      var off=p*4;
+      var light=base && base[off+3] ? Math.max(.52,Math.min(.89,(base[off]/255)*.79)) : .77;
+      var R=rgb[0]*light,G=rgb[1]*light,B=rgb[2]*light;
+      for(var j=0;j<layers.length;j++){
+        var mask=layers[j];
+        if(!mask)continue;
+        var alpha=mask[off+3]/255;
+        if(alpha===0)continue;
+        var dye=hexRGB(colors[banner.layers[j].color]);
+        var strength=alpha;
+        R=R*(1-strength)+dye[0]*light*strength;
+        G=G*(1-strength)+dye[1]*light*strength;
+        B=B*(1-strength)+dye[2]*light*strength;
+      }
+      out.data[off]=R;out.data[off+1]=G;out.data[off+2]=B;out.data[off+3]=255;
+    }
+    ctx.putImageData(out,0,0);
+  }
+  function svg(paths) {
+    var xmlns="http://www.w3.org/2000/svg";
+    var s=document.createElementNS(xmlns,"svg");
+    s.setAttribute("viewBox","0 0 24 24");s.setAttribute("fill","none");
+    s.setAttribute("stroke","currentColor");s.setAttribute("stroke-width","1.8");s.setAttribute("stroke-linecap","round");s.setAttribute("stroke-linejoin","round");s.setAttribute("aria-hidden","true");
+    paths.forEach(function(d){var p=document.createElementNS(xmlns,"path");p.setAttribute("d",d);s.appendChild(p);});
+    return s;
+  }
+  function makeIconButton(label,paths,onclick,extra) {
+    var b=document.createElement("button");b.type="button";
+    b.className="icon-btn"+(extra?" "+extra:"");b.setAttribute("aria-label",label);b.title=label;
+    b.appendChild(svg(paths));b.addEventListener("click",onclick);return b;
+  }
+  function rename(item,card) {
+    var row=card.querySelector(".name-line");
+    var editor=document.createElement("input"); editor.type="text";
+    editor.className="editor";editor.maxLength=72;editor.value=item.name;editor.setAttribute("aria-label","Banner name");
+    var original=item.name;var closed=false;
+    function finish(cancel) {
+      if(closed)return;closed=true;
+      if(!cancel) {item.name=normalizeName(editor.value)||original;save();}
+      editor.replaceWith(row);
+      row.querySelector(".name-text").textContent=item.name;
+    }
+    row.replaceWith(editor);
+    editor.focus();editor.select();
+    editor.addEventListener("keydown",function(e){
+      if(e.key==="Enter"){e.preventDefault();editor.blur();}
+      if(e.key==="Escape"){e.preventDefault();finish(true);}
+    });
+    editor.addEventListener("blur",function(){finish(false);});
+  }
+  function notify(message,action,fn) {
+    clearTimeout(toastTimer);
+    toast.replaceChildren();
+    toast.appendChild(document.createTextNode(message));
+    if(action) {
+      var btn=document.createElement("button");btn.type="button";btn.textContent=action;
+      btn.addEventListener("click",function(){toast.classList.remove("show");if(fn)fn();});
+      toast.appendChild(btn);
+    }
+    toast.classList.add("show");
+    toastTimer=setTimeout(function(){toast.classList.remove("show");},3000);
+  }
+  function remove(item) {
+    var index=entries.findIndex(function(x){return x.id===item.id;});
+    if(index<0)return;
+    entries.splice(index,1);
+    save();render();
+    notify("Banner removed","Undo",function(){entries.splice(Math.min(index,entries.length),0,item);save();render();});
+  }
+  function makeCard(item,index) {
+    var card=document.createElement("article");
+    card.className="card"+(item.done?" completed":"");
+    card.setAttribute("data-id",item.id);
+    card.style.animationDelay=Math.min(index*28,170)+"ms";
+    var a=document.createElement("a");a.className="card-link";a.href=item.url;
+    a.target="_blank";a.rel="noopener noreferrer";
+    a.setAttribute("aria-label","Open "+item.name+" on Minecraft Tools");
+    var preview=document.createElement("div");preview.className="preview";
+    var canvas=document.createElement("canvas");canvas.width=20;canvas.height=40;canvas.setAttribute("role","img");canvas.setAttribute("aria-label","Preview of "+item.name);
+    preview.appendChild(canvas);a.appendChild(preview);
+    var row=document.createElement("div");row.className="name-line";
+    var text=document.createElement("span");text.className="name-text";text.textContent=item.name;text.title=item.name;row.appendChild(text);
+    var arrow=document.createElement("span");arrow.className="out-icon";arrow.appendChild(svg(["M14 5h5v5","M19 5l-9 9","M19 13v6H5V5h6"]));row.appendChild(arrow);
+    a.appendChild(row);card.appendChild(a);
+    var bottom=document.createElement("div");bottom.className="bottom";
+    var label=document.createElement("label");label.className="made-control";
+    var checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=!!item.done;checkbox.setAttribute("aria-label","Mark "+item.name+" as made");
+    checkbox.addEventListener("change",function(){item.done=checkbox.checked;save();render();});
+    label.appendChild(checkbox);label.appendChild(document.createTextNode("Made"));bottom.appendChild(label);
+    var actions=document.createElement("div");actions.className="actions";
+    actions.appendChild(makeIconButton("Rename banner",["M12 20h9","M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"],function(){rename(item,card);}));
+    actions.appendChild(makeIconButton("Remove banner",["M3 6h18","M8 6V4h8v2","M6 6l1 15h10l1-15","M10 10v7","M14 10v7"],function(){remove(item);},"delete"));
+    bottom.appendChild(actions);card.appendChild(bottom);
+    drawBanner(canvas,item.url);
+    return card;
+  }
+  function render() {
+    var visible=entries.filter(function(x){return filter==="all"||(filter==="done"?!!x.done:!x.done);});
+    grid.replaceChildren();
+    visible.forEach(function(item,index){grid.appendChild(makeCard(item,index));});
+    var remaining=entries.filter(function(x){return !x.done;}).length;
+    $("headerCount").textContent=remaining+" to make";
+    $("sectionTitle").textContent="My banners"+(entries.length?" · "+entries.length:"");
+    document.querySelectorAll(".filter").forEach(function(b) {
+      var on=b.dataset.filter===filter;
+      b.classList.toggle("selected",on);b.setAttribute("aria-pressed",String(on));
+    });
+    empty.hidden=visible.length>0;
+    empty.style.display=visible.length?"none":"block";
+    $("emptyTitle").textContent=entries.length?(filter==="done"?"Nothing made yet":filter==="todo"?"All banners made!":"No banners here"):"No banners yet";
+    $("emptyDescription").textContent=entries.length?(filter==="todo"?"Switch to All to see your collection.":filter==="done"?"Mark a banner as made to see it here.":""):"Paste a link above to save your first design.";
+  }
+  document.querySelectorAll(".filter").forEach(function(b){
+    b.addEventListener("click",function(){filter=b.dataset.filter;render();});
+  });
+  render();
+})();
+</script>
+</body>
+</html>
