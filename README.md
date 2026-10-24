@@ -14,17 +14,17 @@ A minimal, mobile-friendly Minecraft banner collection built for GitHub Pages.
 
 ## How sharing works
 
-The site's live collection is stored in a shared public JSON document, whose address is in `storage.json`. Every add, rename, checkbox change, or removal updates this document. Any device opening the site reads the same collection. The small dot in the header is green when fully synced and amber if local edits are waiting to sync.
+The site's live collection is stored in a shared public REST database record, whose address is in `storage.json`. Every add, rename, checkbox change, or removal updates this document. Any device opening the site reads the same collection. The small dot in the header is green when fully synced and amber if local edits are waiting to sync.
 
 GitHub Actions (see `.github/workflows/sync-banners.yml`) initializes the shared document automatically and copies its contents into the repository's `banners.json` at regular intervals. Existing local browser data is migrated automatically and queued changes are retried whenever the site is visited.
 
-**Important:** This is intentionally a no-login, publicly writable collection, per the project's zero-friction design. Anyone who finds the shared storage URL can edit or delete entries. Do not use it for private or sensitive data. GitHub's `banners.json` backup and the provider's version history offer recovery options, but this free third-party service is not guaranteed permanent or always available.
+**Important:** This is intentionally a no-login, publicly writable collection, per the project's zero-friction design. Anyone who finds the shared storage URL can edit or delete entries. Do not use it for private or sensitive data. The repository's regularly updated `banners.json` provides a backup, but this free third-party service is intended for prototypes and is not a guaranteed permanent or highly available database.
 
 ## Deployment
 
 Settings → Pages → Deploy from a branch → `main` → `/ (root)`.
 
-The initial provision runs via GitHub Actions when the workflow is first pushed to `main`; it writes `storage.json` automatically.
+Provisioning is handled automatically by GitHub Actions, which writes `storage.json`. The workflow backs up the live collection to `banners.json` twice an hour.
 
 ## Notes
 
