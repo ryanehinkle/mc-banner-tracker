@@ -1,5 +1,5 @@
 {
   "origin": true,
-  "put": true,
+  "patch": true,
   "content_type": true
 }
