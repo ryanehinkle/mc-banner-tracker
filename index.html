@@ -161,6 +161,8 @@
   var storeURL="";
   var realtimeTopic="";
   var eventStream=null;
+  var realtimeConnected=false;
+  var lastActivity=Date.now();
   var syncHealthy=false;
   var flushing=false, refreshing=false, syncTimer=null;
   var errorStreak=0,retryAfter=0,lastSyncError="",lastToastAt=0;
@@ -269,7 +271,9 @@
     if(!topic || eventStream || !window.EventSource)return;
     // ntfy topics are public and only signal "check the database"; no private data.
     try{
-      eventStream=new EventSource("https://ntfy.sh/"+encodeURIComponent(topic)+"/sse?since=now");
+      eventStream=new EventSource("https://ntfy.sh/"+encodeURIComponent(topic)+"/sse?since=latest");
+      eventStream.onopen=function(){realtimeConnected=true;};
+      eventStream.onerror=function(){realtimeConnected=false;};
       eventStream.onmessage=function(event){
         try{
           var signal=JSON.parse(event.data);
@@ -712,8 +716,16 @@
   render();
   updateSyncStatus();
   refreshRemote().finally(function(){if(pending.length)scheduleSync(300);});
-  // Realtime push updates normally arrive instantly; this is a fallback.
+  // Realtime push updates normally arrive immediately. A faster fallback runs
+  // when the signal stream is down; idle tabs poll slowly to protect quota.
+  setInterval(function(){
+    if(document.hidden)return;
+    var active=Date.now()-lastActivity<10*60*1000;
+    if(!realtimeConnected && active) refreshRemote();
+  },5000);
   setInterval(function(){if(!document.hidden)refreshRemote();},30000);
+  document.addEventListener("pointerdown",function(){lastActivity=Date.now();},{passive:true});
+  document.addEventListener("keydown",function(){lastActivity=Date.now();},{passive:true});
   document.addEventListener("visibilitychange",function(){
     if(!document.hidden){if(pending.length)scheduleSync(250);else refreshRemote();}
   });
