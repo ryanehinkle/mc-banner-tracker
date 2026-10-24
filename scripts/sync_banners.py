@@ -1,117 +1,108 @@
 #!/usr/bin/env python3
-"""Provision public no-login storage and keep a repository backup of its contents."""
+"""Provision tokenless shared banner storage and periodically back it up to GitHub."""
 import json
-import os
 import pathlib
-import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "storage.json"
 BACKUP = ROOT / "banners.json"
-API = "https://jsonblob.com/api/jsonBlob"
+STATUS = ROOT / "storage-status.json"
+BASE = "https://api.restful-api.dev/objects"
+NAME = "ryanehinkle-mc-banner-tracker"
 
 
-def request(method, url, payload=None):
-    headers = {"Accept": "application/json", "User-Agent": "MCBannerTracker-GitHubActions/1.0"}
+def call(method, url, payload=None, headers=None):
+    req_headers = {
+        "User-Agent": "MCBannerTracker-GitHubActions/1.0",
+        "Accept": "application/json",
+    }
     if payload is not None:
-        headers["Content-Type"] = "application/json"
+        req_headers["Content-Type"] = "application/json"
+    if headers:
+        req_headers.update(headers)
     data = json.dumps(payload).encode() if payload is not None else None
-    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=25) as response:
-        body = response.read().decode().strip()
-        try:
-            parsed = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            parsed = {}
-        return parsed, dict(response.headers)
+    with urllib.request.urlopen(
+        urllib.request.Request(url, data=data, headers=req_headers, method=method),
+        timeout=25,
+    ) as response:
+        content = response.read().decode().strip()
+        return json.loads(content) if content else {}, dict(response.headers)
 
 
 def validate(items):
     if not isinstance(items, list):
-        raise ValueError("Shared collection must be an array")
-    entries = []
-    for e in items:
-        if not isinstance(e, dict):
-            continue
-        if isinstance(e.get("url"), str) and isinstance(e.get("name"), str) and isinstance(e.get("id"), str):
-            entries.append({k: e[k] for k in ("id", "url", "name", "done", "created") if k in e})
-    return entries
+        raise ValueError("Invalid banner collection: expected list")
+    return [
+        {key: e[key] for key in ("id", "url", "name", "done", "created") if key in e}
+        for e in items
+        if isinstance(e, dict)
+        and isinstance(e.get("id"), str)
+        and isinstance(e.get("url"), str)
+        and isinstance(e.get("name"), str)
+    ]
 
+
+def load_previous():
+    if CONFIG.exists():
+        config = json.loads(CONFIG.read_text())
+        existing_url = config.get("url", "")
+        if existing_url.startswith(BASE + "/"):
+            return existing_url, []
+        if existing_url.startswith("https://superjsonblob.com/api/jsonBlob/"):
+            obj, _ = call("GET", existing_url)
+            return None, validate(obj.get("entries", []))
+    if BACKUP.exists():
+        return None, validate(json.loads(BACKUP.read_text()))
+    return None, []
+
+
+url, old_entries = load_previous()
+if url is None:
+    created, _ = call("POST", BASE, {
+        "name": NAME,
+        "data": {"entries": old_entries},
+    })
+    identifier = created.get("id")
+    if not identifier:
+        raise RuntimeError("Public database did not return an ID")
+    url = BASE + "/" + str(identifier)
+    # Verify that the document accepts real persistent writes.
+    result, _ = call("GET", url)
+    if validate(result.get("data", {}).get("entries", [])) != old_entries:
+        raise RuntimeError("Created collection could not be read back")
+    call("PUT", url, {"name": NAME, "data": {"entries": old_entries}})
+    updated, _ = call("GET", url)
+    if validate(updated.get("data", {}).get("entries", [])) != old_entries:
+        raise RuntimeError("Created collection could not be updated")
+    CONFIG.write_text(json.dumps({"url": url}, indent=2) + "\n")
+    print("Initialized shared banner storage:", url)
 
 try:
-    endpoint = "https://mantledb.sh/v2/ryanehinkle-mc-banner-tracker-20261024/banners"
-    req = urllib.request.Request(endpoint, method="OPTIONS", headers={
+    req_headers = {
         "Origin": "https://ryanehinkle.github.io",
-        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Method": "PUT",
         "Access-Control-Request-Headers": "content-type",
-    })
-    with urllib.request.urlopen(req, timeout=15) as res:
-        print("MantleDB CORS probe", res.status, dict(res.headers))
+    }
+    _, headers = call("OPTIONS", url, headers=req_headers)
+    allow_origin = headers.get("Access-Control-Allow-Origin", "")
+    allow_methods = headers.get("Access-Control-Allow-Methods", "")
+    allow_headers = headers.get("Access-Control-Allow-Headers", "")
+    status = {
+        "origin": allow_origin in ("*", "https://ryanehinkle.github.io"),
+        "put": "PUT" in allow_methods.upper(),
+        "content_type": "content-type" in allow_headers.lower() or "*" in allow_headers,
+    }
 except Exception as exc:
-    print("MantleDB CORS probe error", repr(exc))
+    status = {"error": str(exc)}
+STATUS.write_text(json.dumps(status, indent=2) + "\n")
+print("Browser CORS verification:", status)
 
-if CONFIG.exists():
-    config = json.loads(CONFIG.read_text())
-    url = config["url"]
-    if not url.startswith(API + "/"):
-        if not url.startswith("https://superjsonblob.com/api/jsonBlob/"):
-            raise ValueError("Unexpected storage URL")
-        # Upgrade the initial prototype to the browser-compatible, CORS-enabled store.
-        old_content, _ = request("GET", url)
-        old_items = validate(old_content.get("entries", []))
-        migrated, migrated_headers = request("POST", API, {"entries": old_items})
-        location = migrated_headers.get("Location", "")
-        identifier = migrated.get("id") or location.rstrip("/").split("/")[-1]
-        if not identifier:
-            raise ValueError("Browser-compatible storage did not provide an ID")
-        url = API + "/" + identifier
-        verified, _ = request("GET", url)
-        if not isinstance(verified.get("entries"), list):
-            raise ValueError("New storage was not readable")
-        CONFIG.write_text(json.dumps({"url": url}, indent=2) + "\n")
-        print("Migrated collection to browser-compatible storage:", url)
-    # Check that browsers hosted on GitHub Pages can read and write the shared API.
-    cors = {"api": url, "origin_allowed": False, "put_allowed": False, "headers": ""}
-    try:
-        req = urllib.request.Request(url, method="OPTIONS", headers={
-            "Origin": "https://ryanehinkle.github.io",
-            "Access-Control-Request-Method": "PUT",
-            "Access-Control-Request-Headers": "content-type",
-        })
-        with urllib.request.urlopen(req, timeout=20) as preflight:
-            allow_origin = preflight.headers.get("Access-Control-Allow-Origin", "")
-            allow_methods = preflight.headers.get("Access-Control-Allow-Methods", "")
-            allow_headers = preflight.headers.get("Access-Control-Allow-Headers", "")
-            cors = {
-                "api": url,
-                "origin_allowed": allow_origin in ("*", "https://ryanehinkle.github.io"),
-                "put_allowed": "PUT" in allow_methods.upper(),
-                "headers": "content-type" in allow_headers.lower() or "*" in allow_headers,
-                "status": preflight.status,
-            }
-    except Exception as exc:
-        cors["error"] = str(exc)
-    (ROOT / "storage-status.json").write_text(json.dumps(cors, indent=2) + "\n")
-    print("Browser CORS preflight:", cors)
-    response, _ = request("GET", url)
-    items = validate(response["entries"])
-    output = json.dumps(items, indent=2, ensure_ascii=False) + "\n"
-    if not BACKUP.exists() or BACKUP.read_text() != output:
-        BACKUP.write_text(output)
-        print("Updated repo backup with", len(items), "banners")
-    else:
-        print("Backup already up-to-date")
+record, _ = call("GET", url)
+items = validate(record.get("data", {}).get("entries", []))
+serialized = json.dumps(items, indent=2, ensure_ascii=False) + "\n"
+if not BACKUP.exists() or BACKUP.read_text() != serialized:
+    BACKUP.write_text(serialized)
+    print("Backed up", len(items), "banners")
 else:
-    existing = []
-    if BACKUP.exists():
-        existing = validate(json.loads(BACKUP.read_text()))
-    created, headers = request("POST", API, {"entries": existing})
-    identifier = created.get("id") or headers.get("Location", "").strip("/").split("/")[-1]
-    if not isinstance(identifier, str) or not identifier:
-        raise ValueError("Storage API did not return an ID")
-    url = API + "/" + identifier
-    check, _ = request("GET", url)
-    if not isinstance(check, dict) or not isinstance(check.get("entries"), list):
-        raise ValueError("Storage could not be verified")
-    CONFIG.write_text(json.dumps({"url": url}, indent=2) + "\n")
-    print("Created shared public store", url)
+    print("Backup is current")
