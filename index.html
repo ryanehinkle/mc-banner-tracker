@@ -71,9 +71,10 @@
     .toast {position:fixed;bottom:28px;left:50%;transform:translate(-50%,15px);opacity:0;pointer-events:none;background:#303a35;color:#f5fff8;border:1px solid #54705d;padding:11px 16px;border-radius:11px;box-shadow:0 12px 38px #0007;font-size:13px;z-index:20;transition:opacity .2s,transform .2s}
     .toast.show{opacity:1;transform:translate(-50%,0)}
     .header-right{display:flex;align-items:center;gap:9px}
-    .sync-status{width:7px;height:7px;border-radius:50%;background:#76cfa1;display:inline-block;flex:0 0 auto;}
+    .sync-status{width:8px;height:8px;border-radius:50%;background:#76cfa1;display:inline-block;flex:0 0 auto;border:0;padding:0;cursor:pointer;transition:background .2s;}
     .sync-status.unsaved{background:#e0b56e}
     .sync-status.offline:not(.unsaved){background:#798581}
+    .sync-status:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
     .toast button{border:0;background:transparent;color:var(--accent);font-weight:700;margin-left:9px;padding:1px 2px;pointer-events:auto}
     @media(max-width:560px) {
       .shell{padding:27px 17px 70px}
@@ -107,7 +108,7 @@
       <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v17l-7-4-7 4V3Z"/><path d="M8 7h8M8 11h5"/></svg></div>
       <div><h1>Banner Tracker</h1><p class="subtitle">Your Minecraft banner collection</p></div>
     </div>
-    <div class="header-right"><span class="sync-status" id="syncStatus" title="Shared collection up to date"></span><span class="header-count" id="headerCount">0 saved</span></div>
+    <div class="header-right"><button type="button" class="sync-status" id="syncStatus" title="Check shared collection" aria-label="Check shared collection"></button><span class="header-count" id="headerCount">0 saved</span></div>
   </header>
   <section class="dropzone" id="dropzone" aria-label="Add a banner">
     <div class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
@@ -159,7 +160,8 @@
   try { pending=JSON.parse(localStorage.getItem(PENDING_KEY)||"[]"); if(!Array.isArray(pending))pending=[]; } catch(err){pending=[];}
   var storeURL="";
   var syncHealthy=false;
-  var flushing=false, refreshing=false, syncTimer=null, refreshingPromise=null;
+  var flushing=false, refreshing=false, syncTimer=null;
+  var errorStreak=0,retryAfter=0,lastSyncError="",lastToastAt=0;
   var filter = "all";
   var cachedImages = new Map();
   var pendingTimer = null;
@@ -195,7 +197,8 @@
     if(!status)return;
     status.classList.toggle("unsaved",!!pending.length);
     status.classList.toggle("offline",!syncHealthy);
-    status.title=pending.length?"Changes waiting to sync":syncHealthy?"Shared collection up to date":"Connecting to shared collection";
+    status.title=pending.length?(lastSyncError?"Changes saved locally — click to retry": "Saving to shared collection"):(syncHealthy?"Synced — click to refresh":lastSyncError?"Connection failed — click to retry":"Connecting to shared collection");
+    status.setAttribute("aria-label",status.title);
   }
   function applyPending(base,operations){
     var result=base.map(function(e){return Object.assign({},e);});
@@ -209,7 +212,8 @@
           var key=parseBanner(e.url).key;
           found=result.findIndex(function(x){return (parseBanner(x.url)||{}).key===key;});
         }
-        if(found>=0)result[found]=Object.assign({},e,{id:result[found].id});
+        // Legacy imports only add missing designs; never overwrite a newer device.
+        if(found>=0 && !op.legacy)result[found]=Object.assign({},e,{id:result[found].id});
         else result.unshift(Object.assign({},e));
       } else if(op.type==="delete"){
         result=result.filter(function(e){return e.id!==op.id;});
@@ -218,13 +222,45 @@
     return result;
   }
   function queueMutation(op){
+    // Only the most recent local change to each banner needs uploading.
+    pending=pending.filter(function(old){
+      if(op.type==="upsert" && old.type==="upsert" && old.entry.id===op.entry.id)return false;
+      if(op.type==="delete" && old.id===op.id)return false;
+      if(op.type==="delete" && old.type==="upsert" && old.entry.id===op.id)return false;
+      return true;
+    });
     pending.push(op);
     save();storePending();scheduleSync();
   }
-  function scheduleSync(){
-    clearTimeout(syncTimer);
-    syncTimer=setTimeout(flushChanges,350);
+  function syncSucceeded(){
+    errorStreak=0;retryAfter=0;lastSyncError="";syncHealthy=true;
+    updateSyncStatus();
   }
+  function syncFailed(err){
+    syncHealthy=false;
+    errorStreak++;
+    lastSyncError=err && err.message ? err.message : "Shared storage unavailable";
+    // 405 and other transient failures should not trigger rapid repeated requests.
+    var delay=Math.min(180000,Math.pow(2,Math.min(6,errorStreak-1))*5000);
+    retryAfter=Date.now()+delay;
+    console.warn("Banner sync delayed:",lastSyncError,"Retry in",Math.round(delay/1000),"seconds");
+    if(pending.length && (Date.now()-lastToastAt>120000)){
+      lastToastAt=Date.now();
+      notify("Sync delayed — changes safe on this device");
+    }
+    updateSyncStatus();
+    if(pending.length)scheduleSync(delay);
+  }
+  function scheduleSync(delay){
+    clearTimeout(syncTimer);
+    var wait=Math.max(delay===undefined?500:delay, retryAfter-Date.now(),0);
+    syncTimer=setTimeout(function(){syncTimer=null;flushChanges();},wait);
+  }
+  $("syncStatus").addEventListener("click",function(){
+    retryAfter=0;errorStreak=0;
+    if(pending.length)flushChanges();
+    else refreshRemote();
+  });
   async function getStoreURL(){
     if(storeURL)return storeURL;
     var response=await fetch(CONFIG_URL+"?v="+Date.now(),{cache:"no-store"});
@@ -236,7 +272,8 @@
   }
   async function readRemote(){
     var url=await getStoreURL();
-    var response=await fetch(url+"?t="+Date.now(),{cache:"no-store"});
+    // No query-string cache buster: some public API gateways reject it with 405.
+    var response=await fetch(url,{cache:"no-store",headers:{"Accept":"application/json"}});
     if(!response.ok)throw Error("Unable to load shared banners ("+response.status+")");
     var result=await response.json();
     if(!result || !result.data || !Array.isArray(result.data.entries))throw Error("Invalid shared banner collection");
@@ -245,11 +282,11 @@
     });
   }
   async function refreshRemote(){
-    if(refreshing || flushing)return;
+    if(refreshing || flushing || Date.now()<retryAfter)return;
     refreshing=true;
     try{
       var next=await readRemote();
-      syncHealthy=true;
+      syncSucceeded();
       if(JSON.stringify(next)!==JSON.stringify(remoteEntries)){
         remoteEntries=next;
         entries=applyPending(remoteEntries,pending);
@@ -257,9 +294,9 @@
         if(!document.querySelector(".editor"))render();
       }
     }catch(err){
-      syncHealthy=false;
+      syncFailed(err);
       // The public repo backup remains readable if the shared service is offline.
-      if(!storeURL && !entries.length && !pending.length){
+      if(!entries.length && !pending.length){
         try{
           var response=await fetch(FALLBACK_URL+"?v="+Date.now(),{cache:"no-store"});
           if(response.ok){
@@ -275,12 +312,13 @@
     }finally{
       refreshing=false;
       updateSyncStatus();
-      if(pending.length && storeURL) scheduleSync();
+      if(pending.length) scheduleSync();
     }
   }
   async function flushChanges(){
     if(flushing || !pending.length)return;
-    if(refreshing){scheduleSync();return;}
+    if(Date.now()<retryAfter){scheduleSync();return;}
+    if(refreshing){scheduleSync(1000);return;}
     flushing=true;updateSyncStatus();
     try{
       for(var loop=0;pending.length && loop<10;loop++){
@@ -298,7 +336,7 @@
         if(JSON.stringify(verify)!==JSON.stringify(updated))
           throw Error("Shared store did not retain changes. Retry.");
         remoteEntries=verify;
-        syncHealthy=true;
+        syncSucceeded();
         pending.splice(0,batch.length);
         storePending();
         entries=applyPending(remoteEntries,pending);
@@ -306,9 +344,7 @@
         if(!document.querySelector(".editor"))render();
       }
     }catch(err){
-      syncHealthy=false;
-      console.error("Banner sync:",err);
-      notify("Sync unavailable — changes saved locally");
+      syncFailed(err);
     }finally{
       flushing=false;updateSyncStatus();
     }
@@ -603,8 +639,9 @@
   render();
   updateSyncStatus();
   refreshRemote().finally(function(){if(pending.length)scheduleSync();});
-  setInterval(function(){if(!document.hidden)refreshRemote();},45000);
-  document.addEventListener("visibilitychange",function(){if(!document.hidden)refreshRemote();});
+  // Poll sparingly to stay below public API rate limits.
+  setInterval(function(){if(!document.hidden)refreshRemote();},180000);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden){if(pending.length)scheduleSync();else refreshRemote();}});
 })();
 </script>
 </body>
