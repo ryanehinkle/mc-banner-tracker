@@ -38,6 +38,30 @@ if CONFIG.exists():
     url = config["url"]
     if not url.startswith(API + "/"):
         raise ValueError("Unexpected storage URL")
+    # Check that browsers hosted on GitHub Pages can read and write the shared API.
+    cors = {"api": url, "origin_allowed": False, "put_allowed": False, "headers": ""}
+    try:
+        req = urllib.request.Request(url, method="OPTIONS", headers={
+            "Origin": "https://ryanehinkle.github.io",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        })
+        with urllib.request.urlopen(req, timeout=20) as preflight:
+            allow_origin = preflight.headers.get("Access-Control-Allow-Origin", "")
+            allow_methods = preflight.headers.get("Access-Control-Allow-Methods", "")
+            allow_headers = preflight.headers.get("Access-Control-Allow-Headers", "")
+            cors = {
+                "api": url,
+                "origin_allowed": allow_origin in ("*", "https://ryanehinkle.github.io"),
+                "put_allowed": "PUT" in allow_methods.upper(),
+                "headers": "content-type" in allow_headers.lower() or "*" in allow_headers,
+                "status": preflight.status,
+            }
+    except Exception as exc:
+        cors["error"] = str(exc)
+    (ROOT / "storage-status.json").write_text(json.dumps(cors, indent=2) + "\n")
+    print("Browser CORS preflight:", cors)
+
     response, _ = request("GET", url)
     items = validate(response["entries"])
     output = json.dumps(items, indent=2, ensure_ascii=False) + "\n"
