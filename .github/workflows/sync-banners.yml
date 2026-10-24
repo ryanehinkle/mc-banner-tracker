@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/sync-banners.yml"
       - "scripts/sync_banners.py"
+      - "scripts/storage_diagnostics_20261024.py"
   schedule:
     - cron: "16,46 * * * *"
   workflow_dispatch:
@@ -24,6 +25,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
+      - name: Test alternative storage
+        run: python3 scripts/storage_diagnostics_20261024.py
       - name: Initialize or back up shared banners
         run: python3 scripts/sync_banners.py
       - name: Commit changes
