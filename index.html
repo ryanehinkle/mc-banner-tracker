@@ -460,27 +460,62 @@
       return {url:u.href,base:base,layers:layers,key:key};
     } catch(err) { return null; }
   }
-  function getNameFromDrop(transfer) {
-    var rawHTML = transfer.getData("text/html");
-    if (!rawHTML) return "";
-    try {
-      var doc = new DOMParser().parseFromString(rawHTML,"text/html");
-      var links = doc.querySelectorAll("a[href]");
-      for (var i=0;i<links.length;i++) {
-        var a=links[i];
-        var href=a.getAttribute("href") || "";
-        if (parseBanner(href)) {
-          var headline=a.querySelector("strong,b,h1,h2,h3,h4,.banner-title,.title");
-          var clean=a.cloneNode(true);
-          clean.querySelectorAll("small,.author,.username,.byline").forEach(function(el){el.remove();});
-          var label=(headline?headline.textContent:clean.textContent||a.querySelector("img")?.getAttribute("alt")||"").trim();
-          if (label && label.length<110 && !/^https?:\/\//i.test(label)) return label;
+  function cleanGalleryTitle(value) {
+    var title=String(value||"").replace(/\u00a0/g," ").split(/[\r\n]+/)[0].trim();
+    title=title.replace(/\s+/g," ").replace(/^["']|["']$/g,"").trim();
+    return title && title.length<=100 && !/^https?:\/\//i.test(title) ? title : "";
+  }
+  function getDraggedBanner(transfer) {
+    // Link drags supply multiple formats, depending on the browser. A gallery
+    // title drag often has an HTML <a title="Owl">Owl</a> AND a plain URL.
+    var html=transfer.getData("text/html")||"";
+    var moz=transfer.getData("text/x-moz-url")||"";
+    var plain=transfer.getData("text/plain")||"";
+    var uriList=transfer.getData("text/uri-list")||"";
+    var url=transfer.getData("text/x-moz-url-data")||"";
+    var name=cleanGalleryTitle(transfer.getData("text/x-moz-url-desc"));
+    var mozLines=moz.split(/\r?\n/);
+    if(!parseBanner(url) && mozLines.length)url=mozLines[0].trim();
+    if(!name && mozLines.length>1)name=cleanGalleryTitle(mozLines[1]);
+    if(html){
+      try{
+        var doc=new DOMParser().parseFromString(html,"text/html");
+        var anchors=doc.querySelectorAll("a[href]");
+        for(var i=0;i<anchors.length;i++){
+          var a=anchors[i],candidate=a.getAttribute("href")||"";
+          if(!parseBanner(candidate))continue;
+          // Prefer metadata from the actual linked title, not the gallery author.
+          var title=a.querySelector(".banner-title,.title,h1,h2,h3,h4,strong,b");
+          var cloned=a.cloneNode(true);
+          cloned.querySelectorAll(".author,.username,.byline,small").forEach(function(el){el.remove();});
+          var label=cleanGalleryTitle(a.getAttribute("title"))
+            ||cleanGalleryTitle(a.getAttribute("aria-label"))
+            ||cleanGalleryTitle(title&&title.textContent)
+            ||cleanGalleryTitle(cloned.textContent)
+            ||cleanGalleryTitle(a.querySelector("img[alt]")?.getAttribute("alt"));
+          url=candidate;
+          if(label)name=label;
+          break;
         }
-      }
-      var img=doc.querySelector("img[alt]");
-      if (img && img.alt && img.alt.length<90) return img.alt.trim();
-    } catch(err) {}
-    return "";
+      }catch(err){}
+    }
+    if(!parseBanner(url)){
+      // text/uri-list may contain comments or multiple URLs.
+      url=uriList.split(/\r?\n/).find(function(line){
+        return line && line.charAt(0)!=="#" && parseBanner(line);
+      })||"";
+    }
+    if(!parseBanner(url)){
+      // Chrome normally provides just the URL as text/plain.
+      url=plain;
+    }
+    if(!name && parseBanner(url)){
+      // Other browsers provide the label on a separate plain-text line.
+      var lines=plain.split(/\r?\n/).map(function(line){return line.trim();}).filter(Boolean);
+      var candidate=lines.find(function(line){return !/^https?:\/\//i.test(line) && !line.startsWith("#");});
+      if(candidate)name=cleanGalleryTitle(candidate);
+    }
+    return {url:url,name:name};
   }
   function normalizeName(name) {
     return String(name||"").replace(/\s+/g," ").trim().slice(0,72);
@@ -495,6 +530,17 @@
     if (!parsed) return false;
     var match = entries.find(function(item) {return (parseBanner(item.url)||{}).key===parsed.key;});
     if (match) {
+      // Dragging a gallery title onto a previously imported unnamed design
+      // upgrades "Banner 3" to its real name without creating a duplicate.
+      var realName=normalizeName(name);
+      if(realName && /^Banner \d+$/.test(match.name)){
+        match.name=realName;
+        queueMutation({type:"patch",id:match.id,fields:{name:realName},fallback:Object.assign({},match)});
+        render();
+        notify("Banner name updated");
+        urlInput.value="";
+        return true;
+      }
       urlInput.value="";
       notify("Already in your collection");
       var card=document.querySelector('[data-id="'+match.id+'"]');
@@ -529,7 +575,7 @@
     if(str && parseBanner(str)) {
       e.preventDefault();
       clearTimeout(pendingTimer);
-      addBanner(str,getNameFromDrop(e.clipboardData));
+      addBanner(str,getDraggedBanner(e.clipboardData).name);
     }
   });
   urlInput.addEventListener("keydown",function(e) {
@@ -546,17 +592,8 @@
     dropzone.classList.remove("drag-over");
     var transfer=e.dataTransfer;
     if(!transfer)return;
-    var html=transfer.getData("text/html");
-    var doc,link="";
-    if(html) {
-      try {
-        doc=new DOMParser().parseFromString(html,"text/html");
-        var candidates=doc.querySelectorAll("a[href]");
-        for(var i=0;i<candidates.length;i++) if(parseBanner(candidates[i].href)) {link=candidates[i].href;break;}
-      } catch(err) {}
-    }
-    link=link || transfer.getData("text/uri-list") || transfer.getData("text/plain");
-    if(!addBanner(link,getNameFromDrop(transfer))) notify("Drop an individual Minecraft Tools banner link");
+    var dragged=getDraggedBanner(transfer);
+    if(!addBanner(dragged.url,dragged.name)) notify("Drop an individual Minecraft Tools banner link");
   });
   dropzone.addEventListener("click",function(e){if(e.target!==urlInput) urlInput.focus();});
 
