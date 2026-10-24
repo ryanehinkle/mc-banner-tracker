@@ -19,3 +19,14 @@ test("GET","https://api.keyval.org/get/"+key,extra={"Origin":"https://ryanehinkl
 test("OPTIONS","https://api.keyval.org/set/"+key+"/"+q,extra={"Origin":"https://ryanehinkle.github.io","Access-Control-Request-Method":"GET"})
 test("GET","https://mantledb.sh/v2/ryanehinkle-mc-probe-20261024/health",extra={"Origin":"https://ryanehinkle.github.io"})
 test("OPTIONS","https://mantledb.sh/v2/ryanehinkle-mc-probe-20261024/health",extra={"Origin":"https://ryanehinkle.github.io","Access-Control-Request-Method":"POST","Access-Control-Request-Headers":"content-type"})
+
+url="https://mantledb.sh/v2/ryanehinkle-banner-probe-20261024-7ca21f/collection"
+payload=__import__("json").dumps({"entries":{"probe_a":{"name":"first","done":False}}}).encode()
+test("POST",url,data=payload,extra={"Content-Type":"application/json","Origin":"https://ryanehinkle.github.io"})
+test("GET",url,extra={"Origin":"https://ryanehinkle.github.io"})
+payload2=__import__("json").dumps({"entries":{"probe_b":{"name":"second","done":True}}}).encode()
+test("PATCH",url,data=payload2,extra={"Content-Type":"application/json","Origin":"https://ryanehinkle.github.io"})
+test("GET",url,extra={"Origin":"https://ryanehinkle.github.io"})
+payload3=__import__("json").dumps({"entries":{"probe_a":None}}).encode()
+test("PATCH",url,data=payload3,extra={"Content-Type":"application/json","Origin":"https://ryanehinkle.github.io"})
+test("GET",url,extra={"Origin":"https://ryanehinkle.github.io"})
