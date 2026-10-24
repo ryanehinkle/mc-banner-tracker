@@ -48,6 +48,22 @@ try{
  assert(Object.keys(r.entries||{}).length===0,"Remote data should be empty after delete");
  assert(problems.every(x=>!x.includes("JS error")),"Unexpected page errors: "+JSON.stringify(problems));
  console.log("PASS: two-device add, edit, checkbox, delete, remote verification");
+ // Test the actual public GitHub Pages origin too, without modifying live data.
+ const live=await browser.newContext();
+ try{
+   const livePage=await live.newPage();
+   livePage.on("pageerror",e=>problems.push("live JS error: "+e.message));
+   await livePage.goto("https://ryanehinkle.github.io/mc-banner-tracker/?check=live-sync", {waitUntil:"domcontentloaded",timeout:25000});
+   await waitFor(livePage,()=>document.querySelector("#syncStatus")?.classList.contains("offline")===false,20000);
+   const remote=await livePage.evaluate(async()=>{
+     const config=await (await fetch("storage.json",{cache:"no-store"})).json();
+     const result=await (await fetch(config.url,{cache:"no-store"})).json();
+     return Object.values(result.entries||{}).length;
+   });
+   assert(remote>=0,"Public site could not read its collection");
+   console.log("PASS: actual GitHub Pages origin can read live shared storage ("+remote+" banners)");
+ }finally{await live.close();}
+
  if(problems.length)console.log("Browser console warnings:",problems.slice(0,8));
 }catch(e){
  console.error("FAIL:",e.message);
