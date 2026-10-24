@@ -2,39 +2,32 @@
 
 A minimal, mobile-friendly Minecraft banner collection built for GitHub Pages.
 
+[Open Banner Tracker](https://ryanehinkle.github.io/mc-banner-tracker/)
+
 ## Features
 
-- Paste or drag a banner link from [Minecraft Tools](https://minecraft.tools/en/banner-galery). It imports automatically, with no Enter key needed.
-- Banner thumbnails are drawn locally with vanilla Minecraft banner textures.
-- Rename banners, open their original designs, mark them as made, and filter the visible collection.
-- The **My banners** count follows the current filter.
-- A shared `banners.json` in this repository is the source of truth, so saved changes are visible on every device.
+- Paste or drag a banner link from [Minecraft Tools](https://minecraft.tools/en/banner-galery). Valid links import automatically.
+- Preview banner patterns using bundled Minecraft textures.
+- Rename banners, open their designs, mark them as made, and filter by status.
+- **My banners** shows the number of visible banners under the current filter.
+- **Automatic cross-device sync, with no login or token required.** 
 
-## Cross-device GitHub sync
+## How sharing works
 
-**Viewing:** Anyone can view the shared collection without signing in. The site fetches `banners.json` from GitHub on load and periodically when open.
+The site's live collection is stored in a shared public JSON document, whose address is in `storage.json`. Every add, rename, checkbox change, or removal updates this document. Any device opening the site reads the same collection. The small dot in the header is green when fully synced and amber if local edits are waiting to sync.
 
-**Editing:** GitHub Pages is a static website and cannot securely update repository files anonymously. To save changes permanently:
+GitHub Actions (see `.github/workflows/sync-banners.yml`) initializes the shared document automatically and copies its contents into the repository's `banners.json` at regular intervals. Existing local browser data is migrated automatically and queued changes are retried whenever the site is visited.
 
-1. In GitHub, [create a fine-grained personal access token](https://github.com/settings/personal-access-tokens/new).
-2. Limit **Repository access** to **Only select repositories → ryanehinkle/mc-banner-tracker**.
-3. Give **Repository permissions → Contents → Read and write**. Leave other permissions at their defaults.
-4. On the tracker, click the cloud icon in the header, paste the token, and choose **Connect & sync**.
-
-The token is kept only in that browser's local storage, **never committed or uploaded into the site's files**. Other devices can view changes immediately; to **edit** on another device, connect a token there too.
-
-The tracker automatically imports existing banner entries from the previous local-only version the first time it loads the new version. Any edits made while disconnected are retained locally and uploaded when connected.
-
-**Security:** Treat your token as a password. Don't share it or commit it to source control. If a device is shared, click **Disconnect this device** and clear its stored website data when you're done. You can revoke the token in GitHub settings.
+**Important:** This is intentionally a no-login, publicly writable collection, per the project's zero-friction design. Anyone who finds the shared storage URL can edit or delete entries. Do not use it for private or sensitive data. GitHub's `banners.json` backup and the provider's version history offer recovery options, but this free third-party service is not guaranteed permanent or always available.
 
 ## Deployment
 
-Enable **Settings → Pages → Deploy from a branch → main → / (root)**. Open:
+Settings → Pages → Deploy from a branch → `main` → `/ (root)`.
 
-https://ryanehinkle.github.io/mc-banner-tracker/
+The initial provision runs via GitHub Actions when the workflow is first pushed to `main`; it writes `storage.json` automatically.
 
 ## Notes
 
-Minecraft Tools banner URLs encode the pattern and dye colors but do not encode the public gallery title. Dragged HTML links may include their gallery title. Otherwise you can edit the initial name yourself.
+Minecraft Tools links encode patterns and colors but not necessarily gallery titles. Dragged gallery HTML can include the title; otherwise rename the entry.
 
-Textures are from Mojang's game assets, via [MC Assets](https://mcasset.cloud/1.21.9/assets/minecraft/textures/entity/banner). Minecraft is a trademark of Mojang/Microsoft; this fan project is unofficial.
+Minecraft textures are Mojang assets obtained via [MC Assets](https://mcasset.cloud/1.21.9/assets/minecraft/textures/entity/banner). This is an unofficial fan project.
