@@ -227,7 +227,7 @@
     var response=await fetch(CONFIG_URL+"?v="+Date.now(),{cache:"no-store"});
     if(!response.ok)throw Error("Shared storage is still being set up");
     var config=await response.json();
-    if(!config.url || !/^https:\/\/superjsonblob\.com\/api\/jsonBlob\/[\w-]+$/.test(config.url))throw Error("Missing shared storage URL");
+    if(!config.url || !/^https:\/\/jsonblob\.com\/api\/jsonBlob\/[\w-]+$/.test(config.url))throw Error("Missing shared storage URL");
     storeURL=config.url;
     return storeURL;
   }
