@@ -227,7 +227,7 @@
     var response=await fetch(CONFIG_URL+"?v="+Date.now(),{cache:"no-store"});
     if(!response.ok)throw Error("Shared storage is still being set up");
     var config=await response.json();
-    if(!config.url || !/^https:\/\/jsonblob\.com\/api\/jsonBlob\/[\w-]+$/.test(config.url))throw Error("Missing shared storage URL");
+    if(!config.url || !/^https:\/\/api\.restful-api\.dev\/objects\/[\w-]+$/.test(config.url))throw Error("Missing shared storage URL");
     storeURL=config.url;
     return storeURL;
   }
@@ -236,8 +236,8 @@
     var response=await fetch(url+"?t="+Date.now(),{cache:"no-store"});
     if(!response.ok)throw Error("Unable to load shared banners ("+response.status+")");
     var result=await response.json();
-    if(!result || !Array.isArray(result.entries))throw Error("Invalid shared banner collection");
-    return result.entries.filter(function(e){
+    if(!result || !result.data || !Array.isArray(result.data.entries))throw Error("Invalid shared banner collection");
+    return result.data.entries.filter(function(e){
       return e && typeof e.id==="string" && typeof e.name==="string" && parseBanner(e.url);
     });
   }
@@ -286,7 +286,7 @@
         var response=await fetch(storeURL,{
           method:"PUT",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({entries:updated})
+          body:JSON.stringify({name:"ryanehinkle-mc-banner-tracker",data:{entries:updated}})
         });
         if(!response.ok)throw Error("Could not save banner changes ("+response.status+")");
         var verify=await readRemote();
