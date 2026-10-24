@@ -157,6 +157,10 @@
 (function() {
   "use strict";
   var STORE = "mc-banner-tracker:v1";
+  var PENDING_KEY = "mc-banner-tracker:pending-v2";
+  var MIGRATION_KEY = "mc-banner-tracker:migrated-v2";
+  var TOKEN_KEY = "mc-banner-tracker:github-token";
+  var DATA_URL = "https://api.github.com/repos/ryanehinkle/mc-banner-tracker/contents/banners.json";
   var colors = ["#1d1d21","#b02e26","#5e7c16","#835432","#3c44aa","#8932b8","#169c9c","#9d9d97","#474f52","#f38baa","#80c71f","#fed83d","#3ab3da","#c74ebd","#f9801d","#f9fffe"];
   // Minecraft Tools' legacy shape IDs (0 = no pattern). Order matters.
   var shapes = {
@@ -169,6 +173,11 @@
     34:"diagonal_up_left",35:"diagonal_right",36:"gradient_up",37:"half_horizontal_bottom",38:"half_vertical_right",39:"globe",40:"piglin",41:"flow",42:"guster"
   };
   var entries = loadEntries();
+  var remoteEntries = [];
+  var pending = [];
+  try { pending=JSON.parse(localStorage.getItem(PENDING_KEY)||"[]"); if(!Array.isArray(pending))pending=[]; } catch(err){pending=[];}
+  var githubToken=localStorage.getItem(TOKEN_KEY)||"";
+  var flushing=false, refreshing=false, syncTimer=null;
   var filter = "all";
   var cachedImages = new Map();
   var pendingTimer = null;
@@ -191,6 +200,149 @@
     try { localStorage.setItem(STORE,JSON.stringify(entries)); }
     catch(err) { notify("Could not save. Check your browser storage."); }
   }
+
+  // GitHub Pages is read-only; the public JSON file is our shared data store.
+  // Writes use a repo-scoped token kept in this browser, never in public files.
+  function storePending(){
+    try {localStorage.setItem(PENDING_KEY,JSON.stringify(pending));}
+    catch(err){notify("Could not store changes on this device");}
+    updateSyncStatus();
+  }
+  function updateSyncStatus(){
+    var b=$("syncButton");
+    b.classList.toggle("connected",!!githubToken);
+    b.classList.toggle("pending",!!pending.length);
+    b.title=pending.length?(githubToken?"Syncing changes":"Changes saved locally — connect GitHub"):githubToken?"GitHub connected":"Connect GitHub to sync";
+    b.setAttribute("aria-label",b.title);
+  }
+  function applyPending(base,operations){
+    var result=base.map(function(e){return Object.assign({},e);});
+    operations.forEach(function(op){
+      if(!op)return;
+      if(op.type==="upsert"){
+        var e=op.entry;
+        if(!e || !parseBanner(e.url))return;
+        var found=result.findIndex(function(x){return x.id===e.id;});
+        if(found===-1 && op.legacy){
+          var key=parseBanner(e.url).key;
+          found=result.findIndex(function(x){return (parseBanner(x.url)||{}).key===key;});
+        }
+        if(found>=0)result[found]=Object.assign({},e,{id:result[found].id});
+        else result.unshift(Object.assign({},e));
+      } else if(op.type==="delete") result=result.filter(function(e){return e.id!==op.id;});
+    });
+    return result;
+  }
+  function queueMutation(op){
+    pending.push(op);save();storePending();
+    if(githubToken)scheduleSync();
+    else openSync();
+  }
+  function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(flushChanges,200);}
+  function encodeBase64(value){
+    var bytes=new TextEncoder().encode(value),raw="";
+    for(var i=0;i<bytes.length;i++)raw+=String.fromCharCode(bytes[i]);
+    return btoa(raw);
+  }
+  async function readRemote(token){
+    var headers={"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+    if(token)headers.Authorization="Bearer "+token;
+    var response=await fetch(DATA_URL+"?t="+Date.now(),{headers:headers,cache:"no-store"});
+    if(!response.ok)throw Error(response.status===401?"Invalid GitHub token":"Could not read GitHub banners ("+response.status+")");
+    var file=await response.json();
+    var binary=atob((file.content||"").replace(/\s/g,""));
+    var decoded=new TextDecoder().decode(Uint8Array.from(binary,function(c){return c.charCodeAt(0);}));
+    var list=JSON.parse(decoded);
+    if(!Array.isArray(list))throw Error("Invalid collection format");
+    return {sha:file.sha,items:list.filter(function(e){return e && typeof e.id==="string" && typeof e.name==="string" && parseBanner(e.url);})};
+  }
+  async function refreshRemote(){
+    if(refreshing || flushing)return;
+    refreshing=true;
+    try{
+      var current=await readRemote();
+      remoteEntries=current.items;
+      entries=applyPending(remoteEntries,pending);
+      save();render();
+    }catch(err){if(!entries.length&&!pending.length)notify("Could not load shared banners");}
+    finally{refreshing=false;updateSyncStatus();}
+  }
+  async function flushChanges(){
+    if(flushing||!githubToken||!pending.length)return;
+    flushing=true;updateSyncStatus();
+    try{
+      while(pending.length){
+        var batch=pending.slice(),complete=false;
+        for(var attempt=0;attempt<4;attempt++){
+          var fresh=await readRemote(githubToken);
+          var next=applyPending(fresh.items,batch);
+          var response=await fetch(DATA_URL,{
+            method:"PUT",
+            headers:{"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","Authorization":"Bearer "+githubToken,"Content-Type":"application/json"},
+            body:JSON.stringify({message:"Update saved Minecraft banners",content:encodeBase64(JSON.stringify(next,null,2)+"\n"),sha:fresh.sha,branch:"main"})
+          });
+          if(response.status===409)continue;
+          if(!response.ok){
+            if(response.status===401||response.status===403)throw Error("Token needs Contents read and write access");
+            throw Error("Could not save to GitHub ("+response.status+")");
+          }
+          remoteEntries=next;
+          pending.splice(0,batch.length);
+          storePending();
+          entries=applyPending(remoteEntries,pending);
+          save();render();
+          complete=true;break;
+        }
+        if(!complete)throw Error("GitHub changed while saving. Please try again.");
+      }
+    }catch(err){notify(err.message||"Could not sync banners");}
+    finally{flushing=false;updateSyncStatus();}
+  }
+  function openSync(){
+    var d=$("syncDialog");
+    $("syncError").textContent="";
+    $("tokenInput").value="";
+    $("syncDisconnect").hidden=!githubToken;
+    $("syncDescription").textContent=githubToken
+      ?"Your collection lives in GitHub. Changes here are shared with your other devices."
+      :"Saved banners appear on every device. To add, rename, check off or delete them from this device, connect a fine-grained GitHub token.";
+    if(!d.open)d.showModal();
+  }
+  $("syncButton").addEventListener("click",openSync);
+  $("syncClose").addEventListener("click",function(){$("syncDialog").close();});
+  $("syncDialog").addEventListener("click",function(e){if(e.target===$("syncDialog"))$("syncDialog").close();});
+  $("syncForm").addEventListener("submit",async function(e){
+    e.preventDefault();
+    var value=$("tokenInput").value.trim();
+    if(!value){
+      if(githubToken){$("syncDialog").close();scheduleSync();return;}
+      $("syncError").textContent="Paste your GitHub token to connect.";return;
+    }
+    var b=$("syncConnect");
+    b.disabled=true;b.textContent="Connecting…";
+    try{
+      await readRemote(value);
+      githubToken=value;
+      localStorage.setItem(TOKEN_KEY,value);
+      $("syncDialog").close();
+      updateSyncStatus();
+      if(pending.length)flushChanges();
+      else refreshRemote();
+      notify("GitHub connected");
+    }catch(err){$("syncError").textContent=err.message||"Connection failed";}
+    finally{b.disabled=false;b.textContent="Connect & sync";}
+  });
+  $("syncDisconnect").addEventListener("click",function(){
+    githubToken="";localStorage.removeItem(TOKEN_KEY);
+    $("syncDialog").close();updateSyncStatus();notify("Disconnected on this device");
+  });
+  function migrateOldCollection(){
+    if(localStorage.getItem(MIGRATION_KEY))return;
+    loadEntries().forEach(function(e){pending.push({type:"upsert",entry:e,legacy:true});});
+    localStorage.setItem(MIGRATION_KEY,"1");
+    storePending();
+  }
+
   function urlFromText(text) {
     var match = String(text || "").match(/https?:\/\/[^\s<>"']+/i);
     if (!match) return null;
@@ -257,13 +409,13 @@
       id:window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random().toString(36).slice(2),
       url:parsed.url,name:normalizeName(name)||defaultName(parsed),done:false,created:Date.now()
     });
-    save();
+    queueMutation({type:"upsert",entry:Object.assign({},entries[0])});
     filter="all";
     render();
     urlInput.value="";
     dropzone.classList.add("added");
     setTimeout(function(){dropzone.classList.remove("added");},750);
-    notify("Banner saved");
+    notify(githubToken?"Saving to GitHub…":"Saved locally — connect GitHub to sync");
     return true;
   }
   function importFromInput() {
@@ -386,7 +538,7 @@
     var original=item.name;var closed=false;
     function finish(cancel) {
       if(closed)return;closed=true;
-      if(!cancel) {item.name=normalizeName(editor.value)||original;save();}
+      if(!cancel) {item.name=normalizeName(editor.value)||original;if(item.name!==original)queueMutation({type:"upsert",entry:Object.assign({},item)});}
       editor.replaceWith(row);
       row.querySelector(".name-text").textContent=item.name;
     }
@@ -415,8 +567,8 @@
     var index=entries.findIndex(function(x){return x.id===item.id;});
     if(index<0)return;
     entries.splice(index,1);
-    save();render();
-    notify("Banner removed","Undo",function(){entries.splice(Math.min(index,entries.length),0,item);save();render();});
+    queueMutation({type:"delete",id:item.id});render();
+    notify("Banner removed","Undo",function(){entries.splice(Math.min(index,entries.length),0,item);queueMutation({type:"upsert",entry:Object.assign({},item)});render();});
   }
   function makeCard(item,index) {
     var card=document.createElement("article");
@@ -434,7 +586,7 @@
     var bottom=document.createElement("div");bottom.className="bottom";
     var label=document.createElement("label");label.className="made-control";
     var checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=!!item.done;checkbox.setAttribute("aria-label","Mark "+item.name+" as made");
-    checkbox.addEventListener("change",function(){item.done=checkbox.checked;save();render();});
+    checkbox.addEventListener("change",function(){item.done=checkbox.checked;queueMutation({type:"upsert",entry:Object.assign({},item)});if(filter==="all"){card.classList.toggle("completed",item.done);updateCounts();}else render();});
     label.title="Mark as made";label.appendChild(checkbox);bottom.appendChild(label);
     var actions=document.createElement("div");actions.className="actions";
     actions.appendChild(makeIconButton("Rename banner",["M12 20h9","M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"],function(){rename(item,card);}));
@@ -465,7 +617,12 @@
   document.querySelectorAll(".filter").forEach(function(b){
     b.addEventListener("click",function(){filter=b.dataset.filter;render();});
   });
+  migrateOldCollection();
   render();
+  updateSyncStatus();
+  refreshRemote().finally(function(){if(githubToken && pending.length)scheduleSync();});
+  setInterval(function(){if(!document.hidden)refreshRemote();},45000);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)refreshRemote();});
 })();
 </script>
 </body>
