@@ -140,12 +140,12 @@
   // Minecraft Tools' legacy shape IDs (0 = no pattern). Order matters.
   var shapes = {
     1:"circle",2:"square_bottom_left",3:"square_bottom_right",4:"square_top_left",5:"square_top_right",
-    6:"stripe_bottom",7:"stripe_top",8:"half_horizontal",9:"half_horizontal_bottom",
-    10:"stripe_left",11:"stripe_center",12:"stripe_right",13:"stripe_middle",14:"stripe_downright",15:"stripe_downleft",
-    16:"half_vertical",17:"half_vertical_right",18:"cross",19:"straight_cross",
+    6:"half_horizontal",7:"stripe_bottom",8:"stripe_top",9:"half_vertical",
+    10:"stripe_left",11:"stripe_center",12:"stripe_right",13:"stripe_middle",14:"straight_cross",15:"stripe_downleft",
+    16:"stripe_downright",17:"cross",18:"diagonal_left",19:"diagonal_up_right",
     20:"triangle_top",21:"triangle_bottom",22:"rhombus",23:"triangles_top",24:"triangles_bottom",
     25:"curly_border",26:"border",27:"small_stripes",28:"bricks",29:"gradient",30:"creeper",31:"skull",32:"flower",33:"mojang",
-    34:"diagonal_left",35:"diagonal_right",36:"gradient_up",37:"piglin",38:"flow",39:"globe",40:"guster"
+    34:"diagonal_up_left",35:"diagonal_right",36:"gradient_up",37:"half_horizontal_bottom",38:"half_vertical_right",39:"globe",40:"piglin",41:"flow",42:"guster"
   };
   var entries = loadEntries();
   var filter = "all";
@@ -260,7 +260,7 @@
     if(str && parseBanner(str)) {
       e.preventDefault();
       clearTimeout(pendingTimer);
-      addBanner(str);
+      addBanner(str,getNameFromDrop(e.clipboardData));
     }
   });
   urlInput.addEventListener("keydown",function(e) {
@@ -369,6 +369,7 @@
     }
     row.replaceWith(editor);
     editor.focus();editor.select();
+    editor.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();});
     editor.addEventListener("keydown",function(e){
       if(e.key==="Enter"){e.preventDefault();editor.blur();}
       if(e.key==="Escape"){e.preventDefault();finish(true);}
