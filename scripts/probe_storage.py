@@ -19,13 +19,15 @@ url="https://api.restful-api.dev/objects/ff808181a09d98f701a16f65f4220128"
 probe("GET",url)
 probe("GET",url+"?t=123")
 probe("OPTIONS",url,origin=True)
-endpoint="https://api.jsonstorage.net/v1/json"
-created=probe("POST",endpoint,{"entries":[{"id":"probe","name":"test","url":"https://minecraft.tools/en/banner.php?color_id_0=13"}]})
+
+probe("GET",url+"?t=456", origin=True)
 try:
-    info=json.loads(created[1]); key=info.get("uri") or info.get("url")
-    if key:
-        probe("GET",key)
-        probe("OPTIONS",key,origin=True)
-        probe("PUT",key,{"entries":[{"id":"probe","name":"updated","url":"https://minecraft.tools/en/banner.php?color_id_0=13"}]})
-        probe("GET",key)
-except Exception as e:print("jsonstorage parse failed",str(e))
+    req=urllib.request.Request(url,headers={"Accept":"application/json","Origin":"https://ryanehinkle.github.io","User-Agent":"Mozilla/5.0 Chrome/155.0.0.0"},method="GET")
+    with urllib.request.urlopen(req,timeout=15) as response:
+        live=json.load(response)
+    if live.get("data") and isinstance(live["data"].get("entries"),list):
+        # Write the unchanged collection to verify a browser-origin PUT.
+        probe("PUT",url,{"name":"ryanehinkle-mc-banner-tracker","data":live["data"]},origin=True)
+        probe("GET",url,origin=True)
+except Exception as error:
+    print("Browser write test unavailable:",repr(error))
