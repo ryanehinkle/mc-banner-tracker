@@ -571,11 +571,14 @@
     pendingTimer=setTimeout(importFromInput,90);
   });
   urlInput.addEventListener("paste",function(e){
-    var str=e.clipboardData && e.clipboardData.getData("text/plain");
-    if(str && parseBanner(str)) {
+    if(!e.clipboardData)return;
+    // A copied gallery title is HTML with an anchor, even when text/plain
+    // contains only "Owl" rather than a URL.
+    var linked=getDraggedBanner(e.clipboardData);
+    if(parseBanner(linked.url)){
       e.preventDefault();
       clearTimeout(pendingTimer);
-      addBanner(str,getDraggedBanner(e.clipboardData).name);
+      addBanner(linked.url,linked.name);
     }
   });
   urlInput.addEventListener("keydown",function(e) {
