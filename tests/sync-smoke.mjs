@@ -41,6 +41,46 @@ try{
  await count(second,0);
  await count(first,0);
  console.log("Deletion synchronized.");
+
+ // Real browser DataTransfer: dragging the gallery title should preserve its name.
+ const owl="https://minecraft.tools/en/banner.php?color_id_0=15&shape_id_1=32&color_id_1=0&shape_id_2=31&color_id_2=15&shape_id_3=1&color_id_3=15&shape_id_4=8&color_id_4=15&shape_id_5=6&color_id_5=15#crafting";
+ await first.evaluate(url=>{
+   const transfer=new DataTransfer();
+   transfer.setData("text/html",'<a href="'+url.replace(/&/g,"&amp;")+'" title="Owl"><strong>Owl</strong><span class="author">CrystalDrop</span></a>');
+   transfer.setData("text/plain",url);
+   document.querySelector("#dropzone").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:transfer}));
+ },owl);
+ await waitFor(first,()=>document.querySelector(".name-text")?.textContent==="Owl");
+ await waitFor(second,()=>document.querySelector(".name-text")?.textContent==="Owl");
+ console.log("PASS: dragged gallery title imported as Owl and synced to other browser.");
+ // Importing the same design again should never create a duplicate.
+ await first.evaluate(url=>{
+   const transfer=new DataTransfer();
+   transfer.setData("text/html",'<a href="'+url+'" title="Owl">Owl</a>');
+   transfer.setData("text/plain",url);
+   document.querySelector("#dropzone").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:transfer}));
+ },owl);
+ await count(first,1);
+ await second.locator(".card").first().getByRole("button",{name:"Remove banner"}).click();
+ await count(first,0);
+ await count(second,0);
+ // A plain URL receives a default name; dragging the title later upgrades it.
+ await first.locator("#urlInput").fill(owl);
+ await waitFor(first,()=>/^Banner \d+$/.test(document.querySelector(".name-text")?.textContent||""));
+ await first.evaluate(url=>{
+   const transfer=new DataTransfer();
+   transfer.setData("text/x-moz-url",url+"\nOwl");
+   transfer.setData("text/plain",url);
+   document.querySelector("#dropzone").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:transfer}));
+ },owl);
+ await waitFor(first,()=>document.querySelector(".name-text")?.textContent==="Owl");
+ await waitFor(second,()=>document.querySelector(".name-text")?.textContent==="Owl");
+ await count(first,1);
+ await second.locator(".card").first().getByRole("button",{name:"Remove banner"}).click();
+ await count(first,0);
+ await count(second,0);
+ console.log("PASS: re-dropping Firefox title upgrades unnamed entry with no duplicate.");
+
  const r=await first.evaluate(async()=>{
    const config=await (await fetch("/storage.json")).json();
    return (await (await fetch(config.url,{cache:"no-store"})).json());
