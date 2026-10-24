@@ -61,6 +61,17 @@ if CONFIG.exists():
         cors["error"] = str(exc)
     (ROOT / "storage-status.json").write_text(json.dumps(cors, indent=2) + "\n")
     print("Browser CORS preflight:", cors)
+    for test_base in ("https://jsonblob.com/api/jsonBlob/test", "https://jsoning.com/api/mc-banner-tracker-test"):
+        try:
+            test_req = urllib.request.Request(test_base, method="OPTIONS", headers={
+                "Origin": "https://ryanehinkle.github.io",
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "content-type",
+            })
+            with urllib.request.urlopen(test_req, timeout=15) as test_response:
+                print("CORS alternative", test_base, test_response.status, dict(test_response.headers))
+        except Exception as exc:
+            print("CORS alternative unavailable", test_base, str(exc))
 
     response, _ = request("GET", url)
     items = validate(response["entries"])
