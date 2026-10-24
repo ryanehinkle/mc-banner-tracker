@@ -10,7 +10,7 @@
   <style>
     :root { color-scheme:dark; --bg:#111416; --panel:#1b1f22; --panel2:#202528; --stroke:#30383b; --text:#f0f3f1; --muted:#889494; --accent:#9ce6b8; --accent2:#74cfa2; }
     * { box-sizing:border-box }
-    body { margin:0; min-height:100vh; background:radial-gradient(ellipse 70% 400px at 50% -230px,#24352d 0%,transparent 100%),var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
     button,input { font:inherit }
     button { cursor:pointer }
     button:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid var(--accent); outline-offset:4px }
@@ -42,21 +42,21 @@
     .filter:hover{color:var(--text)}
     .filter.selected {background:#303a38;color:#e7f7eb;box-shadow:0 1px 5px #0002}
     .grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:17px}
-    .card {position:relative;background:var(--panel);border:1px solid #2d3437;border-radius:16px;overflow:hidden;min-width:0;box-shadow:0 5px 20px #0000000b;transition:transform .2s,border-color .2s,background .2s,box-shadow .2s;animation:appear .28s both}
+    .card {position:relative;background:var(--panel);border:1px solid #2d3437;border-radius:16px;overflow:hidden;min-width:0;box-shadow:0 5px 20px #0000000b;transition:transform .2s,border-color .2s,background .2s,box-shadow .2s}
     .card:hover {transform:translateY(-3px);border-color:#486453;box-shadow:0 12px 32px #0004;background:#1d2325}
     .card.completed .preview {filter:saturate(.78)}
     .card.completed .name-text {color:#aab6b0}
     .card-link {display:block;color:inherit;text-decoration:none;outline-offset:-3px}
     .preview {height:236px;display:flex;justify-content:center;align-items:center;background:radial-gradient(ellipse at 50% 42%,#343b39 0%,#252b2d 54%,#212628 96%);position:relative;transition:filter .2s}
     .preview:before {content:"";pointer-events:none;position:absolute;inset:12px;border:1px solid #ffffff08;border-radius:8px}
-    .preview canvas {width:91px;height:182px;image-rendering:pixelated;object-fit:contain;filter:drop-shadow(5px 7px 5px #0005)}
+    .preview canvas {width:80px;height:160px;image-rendering:pixelated;object-fit:contain;filter:drop-shadow(5px 7px 5px #0005)}
     .card-link:hover .preview canvas{filter:drop-shadow(6px 9px 5px #0007)}
     .name-line {display:flex;align-items:center;justify-content:space-between;gap:6px;padding:14px 14px 8px}
     .name-text {font-weight:650;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;letter-spacing:-.15px}
     .out-icon {color:#778681;flex:0 0 auto}
     .out-icon svg {width:15px;height:15px}
     .bottom {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 11px 10px 14px}
-    .made-control {display:inline-flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:12px;color:#99aaa1;font-weight:550;user-select:none}
+    .made-control {display:inline-flex;align-items:center;gap:0;padding:6px 0;cursor:pointer;font-size:12px;color:#99aaa1;font-weight:550;user-select:none}
     .made-control input {accent-color:var(--accent2);width:15px;height:15px;cursor:pointer;margin:0}
     .actions {display:flex;gap:2px}
     .icon-btn {width:30px;height:30px;border:0;border-radius:8px;display:grid;place-items:center;color:#85928d;background:transparent;transition:background .16s,color .16s}
@@ -71,8 +71,29 @@
     .empty-description {color:var(--muted);font-size:13px;margin:0}
     .toast {position:fixed;bottom:28px;left:50%;transform:translate(-50%,15px);opacity:0;pointer-events:none;background:#303a35;color:#f5fff8;border:1px solid #54705d;padding:11px 16px;border-radius:11px;box-shadow:0 12px 38px #0007;font-size:13px;z-index:20;transition:opacity .2s,transform .2s}
     .toast.show{opacity:1;transform:translate(-50%,0)}
+    .header-right{display:flex;align-items:center;gap:9px}
+    .sync-toggle{border:1px solid var(--stroke);background:#1d2423;border-radius:10px;position:relative;width:36px;height:36px;display:grid;place-items:center;color:#a7b6ae}
+    .sync-toggle svg{width:18px;height:18px}
+    .sync-toggle:hover{border-color:#56725e;color:var(--accent)}
+    .sync-dot{position:absolute;right:4px;top:4px;height:6px;width:6px;border-radius:50%;background:#d1a563;display:none}
+    .sync-toggle.pending .sync-dot{display:block}
+    .sync-toggle.connected:not(.pending) {color:var(--accent)}
+    .sync-dialog{position:fixed;inset:0;margin:auto;width:min(420px,calc(100% - 30px));background:#1d2325;color:var(--text);border:1px solid #39433d;border-radius:18px;padding:26px;box-shadow:0 24px 80px #000b}
+    .sync-dialog::backdrop{background:#0009;backdrop-filter:blur(4px)}
+    .sync-symbol{width:40px;height:40px;border:1px solid #456650;background:#25362d;color:var(--accent);border-radius:12px;display:grid;place-items:center;font-size:23px;margin-bottom:18px}
+    .sync-dialog h2{font-size:21px;margin-bottom:8px}
+    .sync-dialog p{color:#9ea9a4;font-size:13px;line-height:1.65}
+    .sync-close{position:absolute;right:17px;top:12px;background:none;border:0;color:#aebcb3;font-size:25px;padding:2px 7px}
+    .sync-label{display:block;font-size:12px;font-weight:650;color:#e5f0ea;margin:21px 0 8px}
+    .sync-input{width:100%;height:43px;background:#121718;border:1px solid #47534c;border-radius:9px;padding:0 12px;color:var(--text);font-size:13px}
+    .sync-info{margin:14px 0;font-size:12px!important;line-height:1.8!important}
+    .sync-info strong{font-weight:600;color:#dee9e1}
+    .sync-info a{color:var(--accent);text-decoration:none}
+    .sync-error{color:#ffabab!important;margin:0 0 8px;font-size:12px!important}
+    .sync-connect{width:100%;border:0;border-radius:9px;background:var(--accent);color:#14231a;padding:11px;font-size:13px;font-weight:750}
+    .sync-disconnect{display:block;margin:13px auto 0;border:0;background:transparent;color:#9ba9a0;font-size:12px}
+    .sync-disconnect[hidden]{display:none}
     .toast button{border:0;background:transparent;color:var(--accent);font-weight:700;margin-left:9px;padding:1px 2px;pointer-events:auto}
-    @keyframes appear {from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     @media(max-width:560px) {
       .shell{padding:27px 17px 70px}
       header{margin-bottom:27px}
@@ -87,7 +108,7 @@
       .toolbar{margin-top:31px}
       .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
       .preview{height:200px}
-      .preview canvas{width:77px;height:154px}
+      .preview canvas{width:80px;height:160px}
       .name-line{padding:12px 10px 5px}
       .name-text{font-size:13px}
       .bottom{padding:0 7px 9px 10px}
@@ -105,14 +126,13 @@
       <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v17l-7-4-7 4V3Z"/><path d="M8 7h8M8 11h5"/></svg></div>
       <div><h1>Banner Tracker</h1><p class="subtitle">Your Minecraft banner collection</p></div>
     </div>
-    <span class="header-count" id="headerCount">0 saved</span>
+    <div class="header-right"><button class="sync-toggle" type="button" id="syncButton" title="GitHub sync" aria-label="GitHub sync settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.6a5 5 0 0 0-1.2-9.6 7 7 0 0 0-13.1 1.6A4.3 4.3 0 0 0 7 17h10"/><path d="m10 19 3 3 3-3M13 14v8"/></svg><span class="sync-dot" id="syncDot"></span></button><span class="header-count" id="headerCount">0 saved</span></div>
   </header>
   <section class="dropzone" id="dropzone" aria-label="Add a banner">
     <div class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
     <div class="drop-content">
       <p class="drop-caption">Add a banner</p>
       <input class="url-input" id="urlInput" type="url" inputmode="url" placeholder="Paste or drag a Minecraft Tools link…" autocomplete="off" spellcheck="false" aria-label="Minecraft Tools banner URL">
-      <p class="drop-note">Saved instantly when you paste or drop a link</p>
     </div>
     <span class="check-mark" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="m5 12 4 4 10-10"/></svg></span>
   </section>
@@ -132,6 +152,7 @@
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog class="sync-dialog" id="syncDialog" aria-labelledby="syncTitle"><form method="dialog" id="syncForm"><button type="button" id="syncClose" class="sync-close" aria-label="Close">×</button><div class="sync-symbol" aria-hidden="true">↥</div><h2 id="syncTitle">GitHub sync</h2><p id="syncDescription">Your banners are saved in this repository, so they appear on every device. To make changes, connect with a GitHub token.</p><label class="sync-label" for="tokenInput">Fine-grained GitHub token</label><input id="tokenInput" class="sync-input" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false"><p class="sync-info">Repository: <strong>ryanehinkle/mc-banner-tracker</strong><br>Permission: <strong>Contents — Read and write</strong><br><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Create a fine-grained token ↗</a></p><p class="sync-error" id="syncError" role="alert"></p><button type="submit" class="sync-connect" id="syncConnect">Connect & sync</button><button type="button" class="sync-disconnect" id="syncDisconnect" hidden>Disconnect this device</button></form></dialog>
 <script>
 (function() {
   "use strict";
@@ -308,7 +329,9 @@
     var cv=document.createElement("canvas");cv.width=20;cv.height=40;
     var cx=cv.getContext("2d",{willReadFrequently:true});
     cx.clearRect(0,0,20,40);
-    cx.drawImage(image,20,0,20,40,0,0,20,40);
+    // The front banner face starts at texture X=1 (20px wide), not X=20.
+    // X=20 includes the side and back-face UVs, shifting and clipping patterns.
+    cx.drawImage(image,1,0,20,40,0,0,20,40);
     return cx.getImageData(0,0,20,40).data;
   }
   function hexRGB(hex) {
@@ -399,7 +422,6 @@
     var card=document.createElement("article");
     card.className="card"+(item.done?" completed":"");
     card.setAttribute("data-id",item.id);
-    card.style.animationDelay=Math.min(index*28,170)+"ms";
     var a=document.createElement("a");a.className="card-link";a.href=item.url;
     a.target="_blank";a.rel="noopener noreferrer";
     a.setAttribute("aria-label","Open "+item.name+" on Minecraft Tools");
@@ -408,13 +430,12 @@
     preview.appendChild(canvas);a.appendChild(preview);
     var row=document.createElement("div");row.className="name-line";
     var text=document.createElement("span");text.className="name-text";text.textContent=item.name;text.title=item.name;row.appendChild(text);
-    var arrow=document.createElement("span");arrow.className="out-icon";arrow.appendChild(svg(["M14 5h5v5","M19 5l-9 9","M19 13v6H5V5h6"]));row.appendChild(arrow);
     a.appendChild(row);card.appendChild(a);
     var bottom=document.createElement("div");bottom.className="bottom";
     var label=document.createElement("label");label.className="made-control";
     var checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=!!item.done;checkbox.setAttribute("aria-label","Mark "+item.name+" as made");
     checkbox.addEventListener("change",function(){item.done=checkbox.checked;save();render();});
-    label.appendChild(checkbox);label.appendChild(document.createTextNode("Made"));bottom.appendChild(label);
+    label.title="Mark as made";label.appendChild(checkbox);bottom.appendChild(label);
     var actions=document.createElement("div");actions.className="actions";
     actions.appendChild(makeIconButton("Rename banner",["M12 20h9","M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"],function(){rename(item,card);}));
     actions.appendChild(makeIconButton("Remove banner",["M3 6h18","M8 6V4h8v2","M6 6l1 15h10l1-15","M10 10v7","M14 10v7"],function(){remove(item);},"delete"));
@@ -422,13 +443,16 @@
     drawBanner(canvas,item.url);
     return card;
   }
+  function updateCounts(count) {
+    var remaining=entries.filter(function(x){return !x.done;}).length;
+    $("headerCount").textContent=remaining+" to make";
+    $("sectionTitle").textContent="My banners · "+(count===undefined?entries.filter(function(x){return filter==="all"||(filter==="done"?!!x.done:!x.done);}).length:count);
+  }
   function render() {
     var visible=entries.filter(function(x){return filter==="all"||(filter==="done"?!!x.done:!x.done);});
     grid.replaceChildren();
     visible.forEach(function(item,index){grid.appendChild(makeCard(item,index));});
-    var remaining=entries.filter(function(x){return !x.done;}).length;
-    $("headerCount").textContent=remaining+" to make";
-    $("sectionTitle").textContent="My banners"+(entries.length?" · "+entries.length:"");
+    updateCounts(visible.length);
     document.querySelectorAll(".filter").forEach(function(b) {
       var on=b.dataset.filter===filter;
       b.classList.toggle("selected",on);b.setAttribute("aria-pressed",String(on));
