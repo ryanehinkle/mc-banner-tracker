@@ -38,6 +38,18 @@ def validate(items):
     return entries
 
 
+try:
+    endpoint = "https://mantledb.sh/v2/ryanehinkle-mc-banner-tracker-20261024/banners"
+    req = urllib.request.Request(endpoint, method="OPTIONS", headers={
+        "Origin": "https://ryanehinkle.github.io",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    with urllib.request.urlopen(req, timeout=15) as res:
+        print("MantleDB CORS probe", res.status, dict(res.headers))
+except Exception as exc:
+    print("MantleDB CORS probe error", repr(exc))
+
 if CONFIG.exists():
     config = json.loads(CONFIG.read_text())
     url = config["url"]
