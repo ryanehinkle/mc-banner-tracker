@@ -1,0 +1,32 @@
+name: Browser sync smoke test
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "tests/sync-smoke.mjs"
+      - "scripts/setup_test_store.py"
+      - ".github/workflows/browser-sync-test.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install chromium --with-deps
+      - name: Set up isolated shared collection
+        run: python3 scripts/setup_test_store.py
+      - name: Start test server
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/mc-banner-http.log 2>&1 &
+      - name: Exercise two independent browser devices
+        run: node tests/sync-smoke.mjs
