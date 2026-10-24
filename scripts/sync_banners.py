@@ -9,7 +9,7 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "storage.json"
 BACKUP = ROOT / "banners.json"
-API = "https://superjsonblob.com/api/jsonBlob"
+API = "https://jsonblob.com/api/jsonBlob"
 
 
 def request(method, url, payload=None):
@@ -18,7 +18,12 @@ def request(method, url, payload=None):
         headers["Content-Type"] = "application/json"
     data = json.dumps(payload).encode() if payload is not None else None
     with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=25) as response:
-        return json.loads(response.read().decode()), dict(response.headers)
+        body = response.read().decode().strip()
+        try:
+            parsed = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        return parsed, dict(response.headers)
 
 
 def validate(items):
@@ -37,7 +42,22 @@ if CONFIG.exists():
     config = json.loads(CONFIG.read_text())
     url = config["url"]
     if not url.startswith(API + "/"):
-        raise ValueError("Unexpected storage URL")
+        if not url.startswith("https://superjsonblob.com/api/jsonBlob/"):
+            raise ValueError("Unexpected storage URL")
+        # Upgrade the initial prototype to the browser-compatible, CORS-enabled store.
+        old_content, _ = request("GET", url)
+        old_items = validate(old_content.get("entries", []))
+        migrated, migrated_headers = request("POST", API, {"entries": old_items})
+        location = migrated_headers.get("Location", "")
+        identifier = migrated.get("id") or location.rstrip("/").split("/")[-1]
+        if not identifier:
+            raise ValueError("Browser-compatible storage did not provide an ID")
+        url = API + "/" + identifier
+        verified, _ = request("GET", url)
+        if not isinstance(verified.get("entries"), list):
+            raise ValueError("New storage was not readable")
+        CONFIG.write_text(json.dumps({"url": url}, indent=2) + "\n")
+        print("Migrated collection to browser-compatible storage:", url)
     # Check that browsers hosted on GitHub Pages can read and write the shared API.
     cors = {"api": url, "origin_allowed": False, "put_allowed": False, "headers": ""}
     try:
@@ -61,18 +81,6 @@ if CONFIG.exists():
         cors["error"] = str(exc)
     (ROOT / "storage-status.json").write_text(json.dumps(cors, indent=2) + "\n")
     print("Browser CORS preflight:", cors)
-    for test_base in ("https://jsonblob.com/api/jsonBlob/test", "https://jsoning.com/api/mc-banner-tracker-test"):
-        try:
-            test_req = urllib.request.Request(test_base, method="OPTIONS", headers={
-                "Origin": "https://ryanehinkle.github.io",
-                "Access-Control-Request-Method": "PUT",
-                "Access-Control-Request-Headers": "content-type",
-            })
-            with urllib.request.urlopen(test_req, timeout=15) as test_response:
-                print("CORS alternative", test_base, test_response.status, dict(test_response.headers))
-        except Exception as exc:
-            print("CORS alternative unavailable", test_base, str(exc))
-
     response, _ = request("GET", url)
     items = validate(response["entries"])
     output = json.dumps(items, indent=2, ensure_ascii=False) + "\n"
