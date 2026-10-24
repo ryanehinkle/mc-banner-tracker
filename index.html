@@ -140,7 +140,7 @@
   "use strict";
   var STORE = "mc-banner-tracker:v1";
   var PENDING_KEY = "mc-banner-tracker:pending-v2";
-  var MIGRATION_KEY = "mc-banner-tracker:migrated-v2";
+  var MIGRATION_KEY = "mc-banner-tracker:migrated-v3";
   var CONFIG_URL = "storage.json";
   var FALLBACK_URL = "banners.json";
   var colors = ["#1d1d21","#b02e26","#5e7c16","#835432","#3c44aa","#8932b8","#169c9c","#9d9d97","#474f52","#f38baa","#80c71f","#fed83d","#3ab3da","#c74ebd","#f9801d","#f9fffe"];
@@ -159,6 +159,8 @@
   var pending = [];
   try { pending=JSON.parse(localStorage.getItem(PENDING_KEY)||"[]"); if(!Array.isArray(pending))pending=[]; } catch(err){pending=[];}
   var storeURL="";
+  var realtimeTopic="";
+  var eventStream=null;
   var syncHealthy=false;
   var flushing=false, refreshing=false, syncTimer=null;
   var errorStreak=0,retryAfter=0,lastSyncError="",lastToastAt=0;
@@ -185,52 +187,53 @@
     catch(err) { notify("Could not save. Check your browser storage."); }
   }
 
-  // GitHub Pages hosts the UI. A shared public JSON endpoint holds live edits.
-  // GitHub Actions automatically backs up this store to banners.json.
+
+  // Live data is a MantleDB JSON object. Each edit is an atomic JSON merge PATCH,
+  // so two devices never replace each other's entire banner collection.
+  // ntfy provides optional realtime change signals; the REST store is authoritative.
   function storePending(){
     try{localStorage.setItem(PENDING_KEY,JSON.stringify(pending));}
-    catch(err){notify("Could not store changes locally");}
+    catch(err){notify("Could not save local changes — storage may be full");}
     updateSyncStatus();
   }
   function updateSyncStatus(){
     var status=$("syncStatus");
     if(!status)return;
-    status.classList.toggle("unsaved",!!pending.length);
+    status.classList.toggle("unsaved",pending.length>0);
     status.classList.toggle("offline",!syncHealthy);
-    status.title=pending.length?(lastSyncError?"Changes saved locally — click to retry": "Saving to shared collection"):(syncHealthy?"Synced — click to refresh":lastSyncError?"Connection failed — click to retry":"Connecting to shared collection");
+    status.title=pending.length
+      ? (syncHealthy?"Saving "+pending.length+" change(s)…":"Changes saved locally — click to retry")
+      : (syncHealthy?"Synced across devices — click to refresh":"Connecting to shared collection — click to retry");
     status.setAttribute("aria-label",status.title);
   }
+  function bannerKey(e){
+    return (parseBanner(e && e.url)||{}).key||"";
+  }
+  function asSortedEntries(values){
+    return values.filter(function(e){return e&&typeof e.id==="string"&&typeof e.name==="string"&&!!parseBanner(e.url);})
+      .sort(function(a,b){return Number(b.created||0)-Number(a.created||0);});
+  }
   function applyPending(base,operations){
-    var result=base.map(function(e){return Object.assign({},e);});
+    var map=new Map(base.map(function(e){return [e.id,Object.assign({},e)];}));
     operations.forEach(function(op){
       if(!op)return;
-      if(op.type==="upsert"){
-        var e=op.entry;
-        if(!e || !parseBanner(e.url))return;
-        var found=result.findIndex(function(x){return x.id===e.id;});
-        if(found===-1 && op.legacy){
-          var key=parseBanner(e.url).key;
-          found=result.findIndex(function(x){return (parseBanner(x.url)||{}).key===key;});
-        }
-        // Legacy imports only add missing designs; never overwrite a newer device.
-        if(found>=0 && !op.legacy)result[found]=Object.assign({},e,{id:result[found].id});
-        else result.unshift(Object.assign({},e));
-      } else if(op.type==="delete"){
-        result=result.filter(function(e){return e.id!==op.id;});
+      if(op.type==="upsert" && op.entry && parseBanner(op.entry.url)){
+        if(op.legacy && Array.from(map.values()).some(function(e){return bannerKey(e)===bannerKey(op.entry);}))return;
+        map.set(op.entry.id,Object.assign({},op.entry));
+      }else if(op.type==="patch"){
+        var old=map.get(op.id)||op.fallback;
+        if(old)map.set(op.id,Object.assign({},old,op.fields));
+      }else if(op.type==="delete"){
+        map.delete(op.id);
       }
     });
-    return result;
+    return asSortedEntries(Array.from(map.values()));
   }
   function queueMutation(op){
-    // Only the most recent local change to each banner needs uploading.
-    pending=pending.filter(function(old){
-      if(op.type==="upsert" && old.type==="upsert" && old.entry.id===op.entry.id)return false;
-      if(op.type==="delete" && old.id===op.id)return false;
-      if(op.type==="delete" && old.type==="upsert" && old.entry.id===op.id)return false;
-      return true;
-    });
     pending.push(op);
-    save();storePending();scheduleSync();
+    save();
+    storePending();
+    scheduleSync(220);
   }
   function syncSucceeded(){
     errorStreak=0;retryAfter=0;lastSyncError="";syncHealthy=true;
@@ -239,123 +242,194 @@
   function syncFailed(err){
     syncHealthy=false;
     errorStreak++;
-    lastSyncError=err && err.message ? err.message : "Shared storage unavailable";
-    // 405 and other transient failures should not trigger rapid repeated requests.
-    var delay=Math.min(180000,Math.pow(2,Math.min(6,errorStreak-1))*5000);
+    lastSyncError=err&&err.message?err.message:"Connection failed";
+    var delay=Math.min(120000,Math.pow(2,Math.min(errorStreak,6))*1500);
     retryAfter=Date.now()+delay;
-    console.warn("Banner sync delayed:",lastSyncError,"Retry in",Math.round(delay/1000),"seconds");
-    if(pending.length && (Date.now()-lastToastAt>120000)){
+    console.warn("Banner sync:",lastSyncError,"Retry after",Math.round(delay/1000),"seconds");
+    if(pending.length && Date.now()-lastToastAt>90000){
       lastToastAt=Date.now();
-      notify("Sync delayed — changes safe on this device");
+      notify("Saved locally — reconnecting automatically");
     }
     updateSyncStatus();
     if(pending.length)scheduleSync(delay);
   }
   function scheduleSync(delay){
     clearTimeout(syncTimer);
-    var wait=Math.max(delay===undefined?500:delay, retryAfter-Date.now(),0);
-    syncTimer=setTimeout(function(){syncTimer=null;flushChanges();},wait);
+    syncTimer=setTimeout(function(){
+      syncTimer=null;
+      flushChanges();
+    },Math.max(0,delay||0,retryAfter-Date.now()));
   }
   $("syncStatus").addEventListener("click",function(){
     retryAfter=0;errorStreak=0;
     if(pending.length)flushChanges();
     else refreshRemote();
   });
+  function connectRealtime(topic){
+    if(!topic || eventStream || !window.EventSource)return;
+    // ntfy topics are public and only signal "check the database"; no private data.
+    try{
+      eventStream=new EventSource("https://ntfy.sh/"+encodeURIComponent(topic)+"/sse?since=now");
+      eventStream.onmessage=function(event){
+        try{
+          var signal=JSON.parse(event.data);
+          if(signal.event==="message" && !document.hidden){
+            if(flushing)setTimeout(refreshRemote,650);
+            else refreshRemote();
+          }
+        }catch(ignore){}
+      };
+    }catch(err){console.debug("Realtime push not available; automatic polling remains active.");}
+  }
+  function notifyPeers(){
+    if(!realtimeTopic)return;
+    // A simple, CORS-free POST: failure only affects the optional push signal.
+    fetch("https://ntfy.sh/"+encodeURIComponent(realtimeTopic),{
+      method:"POST",mode:"no-cors",body:"changed"
+    }).catch(function(){});
+  }
   async function getStoreURL(){
     if(storeURL)return storeURL;
-    var response=await fetch(CONFIG_URL+"?v="+Date.now(),{cache:"no-store"});
-    if(!response.ok)throw Error("Shared storage is still being set up");
+    var response=await fetch(CONFIG_URL,{cache:"no-store"});
+    if(!response.ok)throw Error("Unable to load shared configuration");
     var config=await response.json();
-    if(!config.url || !/^https:\/\/api\.restful-api\.dev\/objects\/[\w-]+$/.test(config.url))throw Error("Missing shared storage URL");
+    if(typeof config.url!=="string" || !/^https:\/\/mantledb\.sh\/v2\/[\w-]+\/[\w-]+$/.test(config.url))
+      throw Error("Invalid shared storage URL");
     storeURL=config.url;
+    realtimeTopic=typeof config.realtime_topic==="string"?config.realtime_topic:"";
+    connectRealtime(realtimeTopic);
     return storeURL;
   }
   async function readRemote(){
     var url=await getStoreURL();
-    // No query-string cache buster: some public API gateways reject it with 405.
     var response=await fetch(url,{cache:"no-store",headers:{"Accept":"application/json"}});
-    if(!response.ok)throw Error("Unable to load shared banners ("+response.status+")");
+    if(!response.ok)throw Error("Unable to read banners (HTTP "+response.status+")");
     var result=await response.json();
-    if(!result || !result.data || !Array.isArray(result.data.entries))throw Error("Invalid shared banner collection");
-    return result.data.entries.filter(function(e){
-      return e && typeof e.id==="string" && typeof e.name==="string" && parseBanner(e.url);
+    if(!result || typeof result.entries!=="object" || !result.entries || Array.isArray(result.entries))
+      throw Error("Unexpected shared data format");
+    return asSortedEntries(Object.values(result.entries));
+  }
+  function migrateOldCollection(remote){
+    if(localStorage.getItem(MIGRATION_KEY))return;
+    var saved=loadEntries().slice().reverse();
+    var known=new Set(remote.map(bannerKey));
+    pending.forEach(function(op){
+      if(op.entry && op.type==="upsert")known.add(bannerKey(op.entry));
     });
+    saved.forEach(function(e){
+      var key=bannerKey(e);
+      if(!key || known.has(key))return;
+      if(pending.some(function(op){return op.id===e.id && op.type==="delete";}))return;
+      pending.push({type:"upsert",entry:Object.assign({},e),legacy:true});
+      known.add(key);
+    });
+    try{localStorage.setItem(MIGRATION_KEY,"1");}catch(ignore){}
+    storePending();
+  }
+  function setRemote(next){
+    remoteEntries=next;
+    entries=applyPending(next,pending);
+    save();
+    if(!document.querySelector(".editor"))render();
+    updateSyncStatus();
   }
   async function refreshRemote(){
     if(refreshing || flushing || Date.now()<retryAfter)return;
     refreshing=true;
     try{
       var next=await readRemote();
+      migrateOldCollection(next);
       syncSucceeded();
-      if(JSON.stringify(next)!==JSON.stringify(remoteEntries)){
-        remoteEntries=next;
-        entries=applyPending(remoteEntries,pending);
-        save();
-        if(!document.querySelector(".editor"))render();
+      if(JSON.stringify(next)!==JSON.stringify(remoteEntries) || pending.length){
+        setRemote(next);
       }
     }catch(err){
       syncFailed(err);
-      // The public repo backup remains readable if the shared service is offline.
+      // Never replace a browser's unsaved data with a stale repository backup.
       if(!entries.length && !pending.length){
         try{
-          var response=await fetch(FALLBACK_URL+"?v="+Date.now(),{cache:"no-store"});
+          var response=await fetch(FALLBACK_URL,{cache:"no-store"});
           if(response.ok){
             var backup=await response.json();
-            if(Array.isArray(backup)){
-              entries=backup.filter(function(e){return e && parseBanner(e.url);});
-              remoteEntries=entries.slice();
-              save();render();
-            }
+            if(Array.isArray(backup) && backup.length)setRemote(asSortedEntries(backup));
           }
         }catch(ignore){}
       }
     }finally{
       refreshing=false;
       updateSyncStatus();
-      if(pending.length) scheduleSync();
+      if(pending.length && Date.now()>=retryAfter)scheduleSync(300);
     }
   }
   async function flushChanges(){
     if(flushing || !pending.length)return;
-    if(Date.now()<retryAfter){scheduleSync();return;}
-    if(refreshing){scheduleSync(1000);return;}
-    flushing=true;updateSyncStatus();
+    if(Date.now()<retryAfter){scheduleSync(retryAfter-Date.now());return;}
+    if(refreshing){scheduleSync(650);return;}
+    flushing=true;
     try{
-      for(var loop=0;pending.length && loop<10;loop++){
-        // Always merge our queued operations onto the latest shared snapshot.
-        var batch=pending.slice();
-        var latest=await readRemote();
-        var updated=applyPending(latest,batch);
-        var response=await fetch(storeURL,{
-          method:"PUT",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({name:"ryanehinkle-mc-banner-tracker",data:{entries:updated}})
-        });
-        if(!response.ok)throw Error("Could not save banner changes ("+response.status+")");
-        var verify=await readRemote();
-        if(JSON.stringify(verify)!==JSON.stringify(updated))
-          throw Error("Shared store did not retain changes. Retry.");
-        remoteEntries=verify;
-        syncSucceeded();
-        pending.splice(0,batch.length);
-        storePending();
-        entries=applyPending(remoteEntries,pending);
-        save();
-        if(!document.querySelector(".editor"))render();
+      // Read once to map any legacy IDs to the existing shared design.
+      var latest=await readRemote();
+      migrateOldCollection(latest);
+      syncSucceeded();
+      var batch=pending.slice();
+      var aliases=new Map();
+      var patch={entries:{}};
+      for(var i=0;i<batch.length;i++){
+        var op=batch[i],id=op.id||(op.entry&&op.entry.id);
+        if(!id)continue;
+        var remote=latest.find(function(x){return x.id===id;});
+        if(!remote && op.entry && op.legacy){
+          remote=latest.find(function(x){return bannerKey(x)===bannerKey(op.entry);});
+          if(remote){aliases.set(id,remote.id);continue;}
+        }
+        var target=aliases.get(id)||id;
+        if(op.type==="upsert" && op.entry){
+          patch.entries[target]=Object.assign({},op.entry,{id:target});
+        }else if(op.type==="delete"){
+          if(!remote && op.url){
+            remote=latest.find(function(x){return bannerKey(x)===bannerKey({url:op.url});});
+            if(remote)target=remote.id;
+          }
+          patch.entries[target]=null;
+        }else if(op.type==="patch"){
+          if(!remote && op.fallback){
+            remote=latest.find(function(x){return bannerKey(x)===bannerKey(op.fallback);});
+            if(remote)target=remote.id;
+          }
+          var initial=patch.entries[target];
+          if(initial===undefined){
+            initial=remote?{}:(op.fallback?Object.assign({},op.fallback,{id:target}):{});
+          }
+          patch.entries[target]=Object.assign(initial||{},op.fields);
+        }
       }
+      if(Object.keys(patch.entries).length){
+        var response=await fetch(storeURL,{
+          method:"PATCH",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(patch),
+          cache:"no-store"
+        });
+        if(!response.ok)throw Error("Could not save banners (HTTP "+response.status+")");
+      }
+      // Remove only operations actually included in this completed batch.
+      batch.forEach(function(op){
+        var idx=pending.indexOf(op);
+        if(idx>=0)pending.splice(idx,1);
+      });
+      storePending();
+      syncSucceeded();
+      notifyPeers();
+      // The server ACKed the atomic patch. A subsequent GET ensures a live view.
+      var current=await readRemote();
+      setRemote(current);
     }catch(err){
       syncFailed(err);
     }finally{
-      flushing=false;updateSyncStatus();
+      flushing=false;
+      updateSyncStatus();
+      if(pending.length && Date.now()>=retryAfter)scheduleSync(320);
     }
-  }
-  function migrateOldCollection(){
-    if(localStorage.getItem(MIGRATION_KEY))return;
-    loadEntries().slice().reverse().forEach(function(e){
-      pending.push({type:"upsert",entry:e,legacy:true});
-    });
-    localStorage.setItem(MIGRATION_KEY,"1");
-    storePending();
   }
 
   function urlFromText(text) {
@@ -556,7 +630,7 @@
     var original=item.name;var closed=false;
     function finish(cancel) {
       if(closed)return;closed=true;
-      if(!cancel) {item.name=normalizeName(editor.value)||original;if(item.name!==original)queueMutation({type:"upsert",entry:Object.assign({},item)});}
+      if(!cancel) {item.name=normalizeName(editor.value)||original;if(item.name!==original)queueMutation({type:"patch",id:item.id,fields:{name:item.name},fallback:Object.assign({},item)});}
       editor.replaceWith(row);
       row.querySelector(".name-text").textContent=item.name;
     }
@@ -585,7 +659,7 @@
     var index=entries.findIndex(function(x){return x.id===item.id;});
     if(index<0)return;
     entries.splice(index,1);
-    queueMutation({type:"delete",id:item.id});render();
+    queueMutation({type:"delete",id:item.id,url:item.url});render();
     notify("Banner removed","Undo",function(){entries.splice(Math.min(index,entries.length),0,item);queueMutation({type:"upsert",entry:Object.assign({},item)});render();});
   }
   function makeCard(item,index) {
@@ -604,7 +678,7 @@
     var bottom=document.createElement("div");bottom.className="bottom";
     var label=document.createElement("label");label.className="made-control";
     var checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=!!item.done;checkbox.setAttribute("aria-label","Mark "+item.name+" as made");
-    checkbox.addEventListener("change",function(){item.done=checkbox.checked;queueMutation({type:"upsert",entry:Object.assign({},item)});if(filter==="all"){card.classList.toggle("completed",item.done);updateCounts();}else render();});
+    checkbox.addEventListener("change",function(){item.done=checkbox.checked;queueMutation({type:"patch",id:item.id,fields:{done:item.done},fallback:Object.assign({},item)});if(filter==="all"){card.classList.toggle("completed",item.done);updateCounts();}else render();});
     label.title="Mark as made";label.appendChild(checkbox);bottom.appendChild(label);
     var actions=document.createElement("div");actions.className="actions";
     actions.appendChild(makeIconButton("Rename banner",["M12 20h9","M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"],function(){rename(item,card);}));
@@ -635,13 +709,18 @@
   document.querySelectorAll(".filter").forEach(function(b){
     b.addEventListener("click",function(){filter=b.dataset.filter;render();});
   });
-  migrateOldCollection();
   render();
   updateSyncStatus();
-  refreshRemote().finally(function(){if(pending.length)scheduleSync();});
-  // Poll sparingly to stay below public API rate limits.
-  setInterval(function(){if(!document.hidden)refreshRemote();},180000);
-  document.addEventListener("visibilitychange",function(){if(!document.hidden){if(pending.length)scheduleSync();else refreshRemote();}});
+  refreshRemote().finally(function(){if(pending.length)scheduleSync(300);});
+  // Realtime push updates normally arrive instantly; this is a fallback.
+  setInterval(function(){if(!document.hidden)refreshRemote();},30000);
+  document.addEventListener("visibilitychange",function(){
+    if(!document.hidden){if(pending.length)scheduleSync(250);else refreshRemote();}
+  });
+  window.addEventListener("online",function(){
+    retryAfter=0;
+    if(pending.length)scheduleSync(250);else refreshRemote();
+  });
 })();
 </script>
 </body>
