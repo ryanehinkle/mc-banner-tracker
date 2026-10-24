@@ -6,7 +6,7 @@ A minimal Minecraft banner collection hosted on GitHub Pages.
 
 ## Features
 
-- Paste or drag a Minecraft Tools banner link to add it automatically.
+- Paste a banner URL, or drag its **gallery title** to import the link **and its original name** automatically. Dragging a titled link again can rename a previously unnamed import without creating a duplicate.
 - Preview the Minecraft banner pattern using bundled game textures.
 - Edit names, open original crafting instructions, and mark banners made.
 - Filter by All, To make, or Made. Counts match the visible collection.
