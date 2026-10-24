@@ -73,6 +73,7 @@
     .header-right{display:flex;align-items:center;gap:9px}
     .sync-status{width:7px;height:7px;border-radius:50%;background:#76cfa1;display:inline-block;flex:0 0 auto;}
     .sync-status.unsaved{background:#e0b56e}
+    .sync-status.offline:not(.unsaved){background:#798581}
     .toast button{border:0;background:transparent;color:var(--accent);font-weight:700;margin-left:9px;padding:1px 2px;pointer-events:auto}
     @media(max-width:560px) {
       .shell{padding:27px 17px 70px}
@@ -157,6 +158,7 @@
   var pending = [];
   try { pending=JSON.parse(localStorage.getItem(PENDING_KEY)||"[]"); if(!Array.isArray(pending))pending=[]; } catch(err){pending=[];}
   var storeURL="";
+  var syncHealthy=false;
   var flushing=false, refreshing=false, syncTimer=null, refreshingPromise=null;
   var filter = "all";
   var cachedImages = new Map();
@@ -192,7 +194,8 @@
     var status=$("syncStatus");
     if(!status)return;
     status.classList.toggle("unsaved",!!pending.length);
-    status.title=pending.length?"Changes waiting to sync":"Shared collection up to date";
+    status.classList.toggle("offline",!syncHealthy);
+    status.title=pending.length?"Changes waiting to sync":syncHealthy?"Shared collection up to date":"Connecting to shared collection";
   }
   function applyPending(base,operations){
     var result=base.map(function(e){return Object.assign({},e);});
@@ -246,6 +249,7 @@
     refreshing=true;
     try{
       var next=await readRemote();
+      syncHealthy=true;
       if(JSON.stringify(next)!==JSON.stringify(remoteEntries)){
         remoteEntries=next;
         entries=applyPending(remoteEntries,pending);
@@ -253,6 +257,7 @@
         if(!document.querySelector(".editor"))render();
       }
     }catch(err){
+      syncHealthy=false;
       // The public repo backup remains readable if the shared service is offline.
       if(!storeURL && !entries.length && !pending.length){
         try{
@@ -293,6 +298,7 @@
         if(JSON.stringify(verify)!==JSON.stringify(updated))
           throw Error("Shared store did not retain changes. Retry.");
         remoteEntries=verify;
+        syncHealthy=true;
         pending.splice(0,batch.length);
         storePending();
         entries=applyPending(remoteEntries,pending);
@@ -300,6 +306,7 @@
         if(!document.querySelector(".editor"))render();
       }
     }catch(err){
+      syncHealthy=false;
       console.error("Banner sync:",err);
       notify("Sync unavailable — changes saved locally");
     }finally{
