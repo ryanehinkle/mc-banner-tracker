@@ -1,33 +1,35 @@
 # Minecraft Banner Tracker
 
-A minimal, mobile-friendly Minecraft banner collection built for GitHub Pages.
+A minimal Minecraft banner collection hosted on GitHub Pages.
 
 [Open Banner Tracker](https://ryanehinkle.github.io/mc-banner-tracker/)
 
 ## Features
 
-- Paste or drag a banner link from [Minecraft Tools](https://minecraft.tools/en/banner-galery). Valid links import automatically.
-- Preview banner patterns using bundled Minecraft textures.
-- Rename banners, open their designs, mark them as made, and filter by status.
-- **My banners** shows the number of visible banners under the current filter.
-- **Automatic cross-device sync, with no login or token required.** 
+- Paste or drag a Minecraft Tools banner link to add it automatically.
+- Preview the Minecraft banner pattern using bundled game textures.
+- Edit names, open original crafting instructions, and mark banners made.
+- Filter by All, To make, or Made. Counts match the visible collection.
+- **Cross-device sync with no login and no token.** All devices read the same shared collection.
 
-## How sharing works
+## Live sync architecture
 
-The site's live collection is stored in a shared public REST database record, whose address is in `storage.json`. Every add, rename, checkbox change, or removal updates this document. Any device opening the site reads the same collection. The small dot in the header is green when fully synced and amber if local edits are waiting to sync.
+- **Shared data:** [MantleDB](https://mantledb.sh/) unclaimed public-write JSON document, configured in `storage.json`. A `PATCH` updates a single banner's fields atomically, without overwriting the entire collection.
+- **Realtime update signals:** [ntfy](https://ntfy.sh/) Server-Sent Events tell other open browsers to refresh after a successful save; the notification contains no banner details.
+- **Resilience:** Pending edits remain in each browser's local storage until acknowledged by the database, with retries, a clickable connection indicator, and a polling fallback if the push stream disconnects.
+- **GitHub backup:** GitHub Actions copies the public store to `banners.json` twice an hour and writes an automated daily heartbeat to prevent free-tier inactivity expiry.
+- **Previous browser data:** Existing locally saved entries and unsent changes from the old API are merged into the new collection on the first successful connection.
 
-GitHub Actions (see `.github/workflows/sync-banners.yml`) initializes the shared document automatically and copies its contents into the repository's `banners.json` at regular intervals. Existing local browser data is migrated automatically and queued changes are retried whenever the site is visited.
+**Tested:** The `Browser sync smoke test` workflow runs two independent Chromium browser contexts and confirms that adding, renaming, marking Made, and deleting updates both devices, without reloading. It also checks the persisted database. Tests use an isolated namespace to avoid changing your personal banners.
 
-**Important:** This is intentionally a no-login, publicly writable collection, per the project's zero-friction design. Anyone who finds the shared storage URL can edit or delete entries. Do not use it for private or sensitive data. The repository's regularly updated `banners.json` provides a backup, but this free third-party service is intended for prototypes and is not a guaranteed permanent or highly available database.
+**Security note:** There is intentionally no login. Anyone who discovers the database address can modify entries. Don't store sensitive information. MantleDB and ntfy are separate free third-party services, and their uptime and long-term retention cannot be guaranteed.
 
-## Deployment
+## GitHub Pages
 
-Settings → Pages → Deploy from a branch → `main` → `/ (root)`.
-
-Provisioning is handled automatically by GitHub Actions, which writes `storage.json`. The workflow backs up the live collection to `banners.json` twice an hour.
+Deploy `main` from the repository root in **Settings → Pages**.
 
 ## Notes
 
-Minecraft Tools links encode patterns and colors but not necessarily gallery titles. Dragged gallery HTML can include the title; otherwise rename the entry.
+Minecraft Tools crafting URLs encode dye colors and patterns but not necessarily gallery titles. Dragged gallery HTML may include the title; otherwise rename it manually.
 
-Minecraft textures are Mojang assets obtained via [MC Assets](https://mcasset.cloud/1.21.9/assets/minecraft/textures/entity/banner). This is an unofficial fan project.
+Minecraft textures are Mojang game assets obtained via [MC Assets](https://mcasset.cloud/1.21.9/assets/minecraft/textures/entity/banner). Unofficial fan project.
